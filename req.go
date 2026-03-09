@@ -1,0 +1,84 @@
+// ©Hayabusa Cloud Co., Ltd. 2026. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
+package cove
+
+// Req is a contextual prerequisite over C.
+type Req[C Ambient] func(C) bool
+
+func trueReq[C Ambient](C) bool { return true }
+
+func falseReq[C Ambient](C) bool { return false }
+
+// Need checks whether ctx satisfies req. A nil requirement is treated as true.
+func Need[C Ambient](ctx C, req Req[C]) bool {
+	if req == nil {
+		return true
+	}
+	return req(ctx)
+}
+
+// Pullback transports a requirement along a context projection.
+func Pullback[C, D Ambient](req Req[D], f func(C) D) Req[C] {
+	if req == nil {
+		return nil
+	}
+	return func(ctx C) bool {
+		return req(f(ctx))
+	}
+}
+
+// All conjunctively composes requirements.
+func All[C Ambient](reqs ...Req[C]) Req[C] {
+	switch len(reqs) {
+	case 0:
+		return True[C]()
+	case 1:
+		return reqs[0]
+	}
+	return func(ctx C) bool {
+		for _, req := range reqs {
+			if !Need(ctx, req) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// Any disjunctively composes requirements.
+func Any[C Ambient](reqs ...Req[C]) Req[C] {
+	switch len(reqs) {
+	case 0:
+		return False[C]()
+	case 1:
+		return reqs[0]
+	}
+	return func(ctx C) bool {
+		for _, req := range reqs {
+			if Need(ctx, req) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Not negates a requirement.
+func Not[C Ambient](req Req[C]) Req[C] {
+	if req == nil {
+		return False[C]()
+	}
+	return func(ctx C) bool { return !req(ctx) }
+}
+
+// True returns a requirement that always succeeds.
+func True[C Ambient]() Req[C] {
+	return trueReq[C]
+}
+
+// False returns a requirement that always fails.
+func False[C Ambient]() Req[C] {
+	return falseReq[C]
+}
