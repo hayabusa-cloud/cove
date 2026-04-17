@@ -5,8 +5,9 @@
 package cove_test
 
 import (
-	"code.hybscloud.com/cove"
 	"testing"
+
+	"code.hybscloud.com/cove"
 )
 
 func TestNeedAllAnyNot(t *testing.T) {
@@ -145,6 +146,30 @@ func TestCheckRules(t *testing.T) {
 	}
 }
 
+func TestRequireRejectsEmptyName(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for empty rule name")
+		}
+		if s, ok := r.(string); !ok || s != "cove: empty rule name" {
+			t.Fatalf("unexpected panic value: %v", r)
+		}
+	}()
+	cove.Require("", func(v int) bool { return v > 0 })
+}
+
+func TestCheckRuleUnnamedFailureStillFails(t *testing.T) {
+	rule := cove.Rule[int]{Check: func(v int) bool { return v > 0 }}
+	report := cove.CheckRule(0, rule)
+	if report.OK() {
+		t.Fatalf("unnamed failing rule must not pass: %#v", report)
+	}
+	if report.Failed == "" || report.Checked != 1 {
+		t.Fatalf("unexpected unnamed failure report: %#v", report)
+	}
+}
+
 func TestRuleReqAndMatch(t *testing.T) {
 	r := cove.Require("positive", func(v int) bool { return v > 0 })
 	req := r.Req()
@@ -172,5 +197,16 @@ func TestCheckRulesEmpty(t *testing.T) {
 	report := cove.CheckRules[int](0)
 	if !report.OK() || report.Checked != 0 {
 		t.Fatalf("empty rules should pass: %#v", report)
+	}
+}
+
+func TestRuleErrorError(t *testing.T) {
+	var empty cove.RuleError
+	if empty.Error() != "" {
+		t.Fatalf("empty RuleError should render as empty string, got %q", empty.Error())
+	}
+	named := cove.RuleError("positive")
+	if named.Error() != "positive" {
+		t.Fatalf("named RuleError should render as its name, got %q", named.Error())
 	}
 }

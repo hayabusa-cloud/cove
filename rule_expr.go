@@ -12,6 +12,7 @@ type RuleExpr[C Ambient] struct {
 
 // RequireExpr constructs a named Expr-world rule.
 func RequireExpr[C Ambient](name string, check ReqExpr[C]) RuleExpr[C] {
+	requireRuleName(name)
 	return RuleExpr[C]{Name: name, Check: check}
 }
 
@@ -31,14 +32,14 @@ func CheckRuleExpr[C Ambient](ctx C, rule RuleExpr[C]) Report {
 	if NeedExpr(ctx, rule.Check) {
 		return Report{Checked: 1}
 	}
-	return Report{Failed: RuleError(rule.Name), Checked: 1}
+	return Report{Failed: ruleFailure(rule.Name), Checked: 1}
 }
 
 // CheckRulesExpr evaluates rules left to right and stops at the first failure.
 func CheckRulesExpr[C Ambient](ctx C, rules ...RuleExpr[C]) Report {
 	for i, rule := range rules {
 		if !NeedExpr(ctx, rule.Check) {
-			return Report{Failed: RuleError(rule.Name), Checked: i + 1}
+			return Report{Failed: ruleFailure(rule.Name), Checked: i + 1}
 		}
 	}
 	return Report{Checked: len(rules)}

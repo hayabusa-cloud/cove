@@ -5,8 +5,9 @@
 package cove_test
 
 import (
-	"code.hybscloud.com/cove"
 	"testing"
+
+	"code.hybscloud.com/cove"
 )
 
 func TestExprReqBasics(t *testing.T) {
@@ -178,6 +179,30 @@ func TestCheckRuleExpr(t *testing.T) {
 	}
 	if report := cove.CheckRuleExpr(-1, rule); report.OK() || report.Failed != "positive" || report.Checked != 1 {
 		t.Fatalf("single rule failure: %#v", report)
+	}
+}
+
+func TestRequireExprRejectsEmptyName(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for empty rule name")
+		}
+		if s, ok := r.(string); !ok || s != "cove: empty rule name" {
+			t.Fatalf("unexpected panic value: %v", r)
+		}
+	}()
+	cove.RequireExpr("", cove.ExprAtom(func(v int) bool { return v > 0 }))
+}
+
+func TestCheckRuleExprUnnamedFailureStillFails(t *testing.T) {
+	rule := cove.RuleExpr[int]{Check: cove.ExprAtom(func(v int) bool { return v > 0 })}
+	report := cove.CheckRuleExpr(0, rule)
+	if report.OK() {
+		t.Fatalf("unnamed failing rule must not pass: %#v", report)
+	}
+	if report.Failed == "" || report.Checked != 1 {
+		t.Fatalf("unexpected unnamed failure report: %#v", report)
 	}
 }
 
