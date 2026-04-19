@@ -7,7 +7,7 @@ package cove
 type reqKind uint8
 
 const (
-	reqTrue reqKind = iota // zero value: no requirements
+	reqTrue reqKind = iota // zero value, no requirements
 	reqFalse
 	reqAtom
 	reqNot
@@ -20,10 +20,10 @@ const (
 type ReqExpr[C Ambient] struct {
 	kind reqKind
 	fn   func(C) bool // reqAtom
-	sub  []ReqExpr[C] // reqNot stores its single child in sub[0]; reqAll and reqAny store all children
+	sub  []ReqExpr[C] // reqNot stores one child in sub[0], reqAll and reqAny store all children
 }
 
-// NeedExpr evaluates an Expr-world requirement against ctx.
+// NeedExpr reports whether ctx satisfies req.
 func NeedExpr[C Ambient](ctx C, req ReqExpr[C]) bool {
 	switch req.kind {
 	case reqFalse:
@@ -59,17 +59,17 @@ func ExprFalse[C Ambient]() ReqExpr[C] {
 	return ReqExpr[C]{kind: reqFalse}
 }
 
-// ExprAtom wraps a leaf predicate.
+// ExprAtom wraps a leaf predicate as a requirement expression.
 func ExprAtom[C Ambient](fn func(C) bool) ReqExpr[C] {
 	return ReqExpr[C]{kind: reqAtom, fn: fn}
 }
 
-// ExprNot negates a requirement.
+// ExprNot returns the negation of inner.
 func ExprNot[C Ambient](inner ReqExpr[C]) ReqExpr[C] {
 	return ReqExpr[C]{kind: reqNot, sub: []ReqExpr[C]{inner}}
 }
 
-// ExprAll conjunctively composes requirements.
+// ExprAll returns the conjunction of reqs.
 func ExprAll[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	switch len(reqs) {
 	case 0:
@@ -81,7 +81,7 @@ func ExprAll[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	}
 }
 
-// ExprAny disjunctively composes requirements.
+// ExprAny returns the disjunction of reqs.
 func ExprAny[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	switch len(reqs) {
 	case 0:
@@ -93,8 +93,8 @@ func ExprAny[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	}
 }
 
-// ExprPullback transports a requirement along a context projection
-// and preserves the explicit boolean structure.
+// ExprPullback transports req along a context projection and preserves its
+// explicit Boolean structure.
 func ExprPullback[C, D Ambient](req ReqExpr[D], f func(C) D) ReqExpr[C] {
 	switch req.kind {
 	case reqFalse:

@@ -4,8 +4,8 @@
 
 package cove
 
-// Ambient is the type constraint for ambient context type parameters.
+// Ambient constrains ambient context type parameters.
 type Ambient interface{}
 
-// Focus is the type constraint for type parameters that denote values in focus.
+// Focus constrains type parameters that represent focused values.
 type Focus interface{}

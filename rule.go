@@ -13,20 +13,20 @@ type Rule[C Ambient] struct {
 // RuleError names the first failed rule in a report.
 type RuleError string
 
-// Error reports the failed rule name in diagnostic form.
+// Error returns the failed rule name.
 func (e RuleError) Error() string {
 	return string(e)
 }
 
 const unnamedRuleFailure RuleError = "cove: unnamed rule"
 
-// Report is the result of checking one or more named rules.
+// Report records the result of checking one or more named rules.
 type Report struct {
 	Failed  RuleError // zero value means success
 	Checked int       // number of rules examined before success or first failure
 }
 
-// OK reports whether all checked rules passed.
+// OK reports whether every checked rule passed.
 func (r Report) OK() bool { return r.Failed == "" }
 
 // FailedRule reports the first failed rule name, or "" on success.
@@ -46,8 +46,8 @@ func requireRuleName(name string) {
 	}
 }
 
-// ruleFailure keeps Report.OK sound even for direct Rule literals that bypass
-// Require/RequireExpr.
+// ruleFailure converts a rule name to a failure label while keeping [Report.OK]
+// sound for direct [Rule] literals that bypass [Require] and [RequireExpr].
 func ruleFailure(name string) RuleError {
 	if name == "" {
 		return unnamedRuleFailure
@@ -64,15 +64,15 @@ func Require[C Ambient](name string, check Req[C]) Rule[C] {
 // Req returns the underlying requirement.
 func (r Rule[C]) Req() Req[C] { return r.Check }
 
-// Match reports whether ctx satisfies the rule.
+// Match reports whether ctx satisfies r.
 func (r Rule[C]) Match(ctx C) bool { return Need(ctx, r.Check) }
 
-// PullbackRule transports a named rule along a context projection.
+// PullbackRule transports r along a context projection.
 func PullbackRule[C, D Ambient](rule Rule[C], f func(D) C) Rule[D] {
 	return Rule[D]{Name: rule.Name, Check: Pullback(rule.Check, f)}
 }
 
-// CheckRule evaluates a single rule.
+// CheckRule checks a single rule.
 func CheckRule[C Ambient](ctx C, rule Rule[C]) Report {
 	if Need(ctx, rule.Check) {
 		return Report{Checked: 1}
@@ -80,7 +80,7 @@ func CheckRule[C Ambient](ctx C, rule Rule[C]) Report {
 	return Report{Failed: ruleFailure(rule.Name), Checked: 1}
 }
 
-// CheckRules evaluates rules left to right and stops at the first failure.
+// CheckRules checks rules from left to right and stops at the first failure.
 func CheckRules[C Ambient](ctx C, rules ...Rule[C]) Report {
 	for i, rule := range rules {
 		if !Need(ctx, rule.Check) {
