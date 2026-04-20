@@ -13,7 +13,10 @@ type Rule[C Ambient] struct {
 // RuleError names the first failed rule in a report.
 type RuleError string
 
-// Error returns the failed rule name.
+// Error returns the failed rule label.
+//
+// For direct [Rule] literals with an empty name, the label falls back to
+// "cove: unnamed rule".
 func (e RuleError) Error() string {
 	return string(e)
 }
@@ -29,7 +32,10 @@ type Report struct {
 // OK reports whether every checked rule passed.
 func (r Report) OK() bool { return r.Failed == "" }
 
-// FailedRule reports the first failed rule name, or "" on success.
+// FailedRule reports the first failed rule label, or "" on success.
+//
+// For direct [Rule] literals with an empty name, the label falls back to
+// "cove: unnamed rule".
 func (r Report) FailedRule() string { return string(r.Failed) }
 
 // Err returns the first failed rule as an error, or nil on success.
