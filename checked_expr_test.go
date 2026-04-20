@@ -5,8 +5,9 @@
 package cove_test
 
 import (
-	"code.hybscloud.com/cove"
 	"testing"
+
+	"code.hybscloud.com/cove"
 )
 
 func TestCheckedExprIntoView(t *testing.T) {
@@ -129,5 +130,19 @@ func TestPullbackGuardedExpr(t *testing.T) {
 	}
 	if _, report := pulled.IntoView(runtime{Budget: 0}); report.OK() {
 		t.Fatalf("expected pulled guarded failure")
+	}
+}
+
+func TestGuardedExprIntoViewUnnamedFailureDoesNotExposeValue(t *testing.T) {
+	guarded := cove.GuardRuleExpr(cove.RuleExpr[int]{Check: cove.ExprAtom(func(v int) bool { return v > 0 })}, "secret")
+	view, report := guarded.IntoView(0)
+	if report.OK() {
+		t.Fatalf("unnamed failing guard must not pass: %#v", report)
+	}
+	if report.Failed == "" {
+		t.Fatalf("unnamed failing guard must report a failure label: %#v", report)
+	}
+	if got := view.Extract(); got != "" {
+		t.Fatalf("guarded failure exposed value %q", got)
 	}
 }

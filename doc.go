@@ -2,38 +2,72 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package cove carries ambient context across [kont] suspension boundaries.
+// Package cove carries explicit ambient context across [kont] suspension
+// boundaries.
 //
-// When an external runtime steps through [kont] suspensions one at a time,
-// each suspended operation may need state that lives outside the operation
-// itself: dispatch budget, ring capabilities, protocol phase, buffer-group
-// validity. cove pairs that context with suspensions and values so it travels
-// through async boundaries explicitly, without side maps or hidden globals.
+// When a runtime advances a [kont] computation one suspension at a time, each
+// suspended operation may depend on state that lives outside the operation
+// itself, such as dispatch budget, ring capabilities, protocol phase, or
+// buffer-group validity. cove pairs that context with values and suspensions
+// so it stays explicit across asynchronous boundaries instead of travelling
+// through hidden globals or ad-hoc side maps.
 //
-// The package is policy-free. It carries and checks context but does not
-// schedule, retry, or dispatch. Scheduling belongs to takt; kernel mechanics
-// to uring; outcome classification to iox.
+// Read through the lens of modal effects, the carrier shape can be read as
+// naming what happens to ambient context: kont (C → D) replaces it, cove
+// (W(C, A) → B) handles it relatively, and pure pass-through preserves it.
+// Effect structure rides on the carrier, not on a function colour, which keeps
+// cove policy-free.
+//
+// Responsibilities stay split by layer:
+//
+//   - [code.hybscloud.com/iox] classifies outcome and progress evidence
+//   - [kont] defines suspension and resumption shape
+//   - cove carries and checks explicit context
+//   - [code.hybscloud.com/takt] advances execution without taking ownership of that context
+//
+// The package is policy-free: it carries and checks context but never
+// schedules, retries, or dispatches. Kernel mechanics belong to uring, and
+// semantic outcome branching belongs to iox, including
+// [code.hybscloud.com/iox.Classify]. The join point with takt is structural:
+// a contextual carrier exposes the current suspended operation and accepts
+// the matching resumption without transferring ownership of the context to
+// the runner.
 //
 // Carriers:
 //
-//   - [View[C, A]] — a value paired with ambient context
-//   - [SuspensionView[C, A]] — a [kont.Suspension] paired with ambient context
-//   - [Req[C]] / [ReqExpr[C]] — context predicates in closure and data forms
-//   - [Rule[C]] / [RuleExpr[C]] with [Report] — named predicates for diagnostics
-//   - [Checked[C, A]] / [CheckedExpr[C, A]] — requirement-gated values
-//   - [Guarded[C, A]] / [GuardedExpr[C, A]] — rule-gated values
+//   - [View[C, A]], a focused value paired with ambient context
+//   - [Cmd[C, A, B]], a contextual command over [View]
+//   - [SuspensionView[C, A]], a [kont.Suspension] paired with ambient context
+//   - [Req[C]] / [ReqExpr[C]], context predicates in closure and data forms
+//   - [Rule[C]] / [RuleExpr[C]] with [Report], named predicates for diagnostics
+//   - [Checked[C, A]] / [CheckedExpr[C, A]], requirement-gated values
+//   - [Guarded[C, A]] / [GuardedExpr[C, A]], rule-gated values
 //
-// Stepping:
+// Commands:
 //
-//   - [StepWith] / [StepExprWith] evaluate a kont computation and pair the first suspension with context
-//   - [SuspensionView.Resume] advances a suspension, preserving context
-//   - [SuspensionView.ResumeWith] advances a suspension and evolves context
+//   - [ExtractCmd] returns the focused value as the identity contextual command
+//   - [LiftCmd] lifts a focus-only transform into a contextual command
+//   - [Compose] composes contextual commands through [Extend]
+//   - [Run] applies a command to a concrete [View]
+//
+// Contextual suspension boundary:
+//
+//   - [StepWith] / [StepExprWith] run a kont computation and pair its first suspension with context
+//   - [MapContextSuspension] / [WithContextSuspension] map or replace carried context explicitly
+//   - [SuspensionView.Op] / [SuspensionView.Resume] expose the structural join point consumed by takt
+//   - [SuspensionView.ResumeWith] advances a suspension and evolves context for the next step
 //   - [CheckSuspension] / [CheckSuspensionExpr] gate contextualization on a requirement
+//
+// Bridge helpers:
+//
+//   - [Step], [StepExpr], [Reify], [Reflect], [ReifyReq], and [ReflectReq] remain available as convenience wrappers around kont
 //
 // Laws:
 //
 //   - [Duplicate](v).Extract() == v
 //   - [Extend](v, func(w View[C, A]) A { return w.Extract() }) == v
+//   - [Compose](g, f)(v) == g([Extend](v, f))
+//   - [Compose]([ExtractCmd], f) == f and [Compose](g, [ExtractCmd]) == g
 //   - NeedExpr(ctx, [ReifyReq](req)) == [Need](ctx, req), when req != nil
 //   - [Need](ctx, [ReflectReq](expr)) == [NeedExpr](ctx, expr)
 //   - [ExprPullback] distributes over [ExprNot], [ExprAll], and [ExprAny]

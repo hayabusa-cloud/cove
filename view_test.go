@@ -5,8 +5,9 @@
 package cove_test
 
 import (
-	"code.hybscloud.com/cove"
 	"testing"
+
+	"code.hybscloud.com/cove"
 )
 
 func TestViewDuplicateExtractIdentity(t *testing.T) {
@@ -31,6 +32,39 @@ func TestViewExtendExtractIdentity(t *testing.T) {
 	})
 	if got != v {
 		t.Fatalf("extend/extract identity: got %#v want %#v", got, v)
+	}
+}
+
+func TestCmdComposeUsesContextualExtension(t *testing.T) {
+	v := cove.Observe(3, 7)
+	f := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
+		return w.Extract() + w.Ask()
+	})
+	g := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
+		return w.Extract() * 2
+	})
+
+	if got, want := cove.Run(v, cove.Compose(g, f)), g(cove.Extend(v, f)); got != want {
+		t.Fatalf("compose: got %v want %v", got, want)
+	}
+}
+
+func TestCmdIdentityAndLift(t *testing.T) {
+	v := cove.Observe(5, 4)
+	id := cove.Cmd[int, int, int](cove.ExtractCmd[int, int])
+	double := cove.LiftCmd[int, int, int](func(x int) int { return x * 2 })
+
+	if got := cove.Run(v, id); got != 4 {
+		t.Fatalf("identity command: got %v want 4", got)
+	}
+	if got := cove.Run(v, double); got != 8 {
+		t.Fatalf("lifted command: got %v want 8", got)
+	}
+	if got := cove.Run(v, cove.Compose(double, id)); got != cove.Run(v, double) {
+		t.Fatalf("right identity failed: got %v want %v", got, cove.Run(v, double))
+	}
+	if got := cove.Run(v, cove.Compose(id, double)); got != cove.Run(v, double) {
+		t.Fatalf("left identity failed: got %v want %v", got, cove.Run(v, double))
 	}
 }
 

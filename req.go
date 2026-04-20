@@ -4,14 +4,15 @@
 
 package cove
 
-// Req is a contextual prerequisite over C.
+// Req is a requirement over ambient context C.
 type Req[C Ambient] func(C) bool
 
 func trueReq[C Ambient](C) bool { return true }
 
 func falseReq[C Ambient](C) bool { return false }
 
-// Need checks whether ctx satisfies req. A nil requirement is treated as true.
+// Need reports whether ctx satisfies req.
+// A nil requirement is treated as true.
 func Need[C Ambient](ctx C, req Req[C]) bool {
 	if req == nil {
 		return true
@@ -19,7 +20,7 @@ func Need[C Ambient](ctx C, req Req[C]) bool {
 	return req(ctx)
 }
 
-// Pullback transports a requirement along a context projection.
+// Pullback transports req along a context projection.
 func Pullback[C, D Ambient](req Req[D], f func(C) D) Req[C] {
 	if req == nil {
 		return nil
@@ -29,7 +30,7 @@ func Pullback[C, D Ambient](req Req[D], f func(C) D) Req[C] {
 	}
 }
 
-// All conjunctively composes requirements.
+// All returns the conjunction of reqs.
 func All[C Ambient](reqs ...Req[C]) Req[C] {
 	switch len(reqs) {
 	case 0:
@@ -47,7 +48,7 @@ func All[C Ambient](reqs ...Req[C]) Req[C] {
 	}
 }
 
-// Any disjunctively composes requirements.
+// Any returns the disjunction of reqs.
 func Any[C Ambient](reqs ...Req[C]) Req[C] {
 	switch len(reqs) {
 	case 0:
@@ -65,7 +66,7 @@ func Any[C Ambient](reqs ...Req[C]) Req[C] {
 	}
 }
 
-// Not negates a requirement.
+// Not returns the negation of req.
 func Not[C Ambient](req Req[C]) Req[C] {
 	if req == nil {
 		return False[C]()
@@ -73,12 +74,12 @@ func Not[C Ambient](req Req[C]) Req[C] {
 	return func(ctx C) bool { return !req(ctx) }
 }
 
-// True returns a requirement that always succeeds.
+// True returns a requirement that always holds.
 func True[C Ambient]() Req[C] {
 	return trueReq[C]
 }
 
-// False returns a requirement that always fails.
+// False returns a requirement that never holds.
 func False[C Ambient]() Req[C] {
 	return falseReq[C]
 }

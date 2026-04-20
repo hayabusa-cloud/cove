@@ -5,8 +5,9 @@
 package cove_test
 
 import (
-	"code.hybscloud.com/cove"
 	"testing"
+
+	"code.hybscloud.com/cove"
 )
 
 func TestCheckedIntoView(t *testing.T) {
@@ -63,6 +64,12 @@ func TestGuardedIntoView(t *testing.T) {
 	if report.OK() || report.Failed != "positive" {
 		t.Fatalf("unexpected guarded failure: %#v", report)
 	}
+	if got := report.FailedRule(); got != "positive" {
+		t.Fatalf("unexpected failed rule: %q", got)
+	}
+	if err := report.Err(); err == nil || err.Error() != "positive" {
+		t.Fatalf("unexpected report error: %v", err)
+	}
 	mapped := cove.MapGuarded(guarded, func(v int) string { return "x" })
 	if mapped.Value != "x" || mapped.Rule.Name != "positive" {
 		t.Fatalf("unexpected mapped guarded: %#v", mapped)
@@ -80,8 +87,25 @@ func TestGuardedCheck(t *testing.T) {
 	if !report.OK() {
 		t.Fatalf("guarded check should pass: %#v", report)
 	}
+	if err := report.Err(); err != nil {
+		t.Fatalf("successful report should not expose an error: %v", err)
+	}
 	report = guarded.Check(0)
 	if report.OK() || report.Failed != "positive" {
 		t.Fatalf("guarded check should fail: %#v", report)
+	}
+}
+
+func TestGuardedIntoViewUnnamedFailureDoesNotExposeValue(t *testing.T) {
+	guarded := cove.GuardRule(cove.Rule[int]{Check: func(v int) bool { return v > 0 }}, "secret")
+	view, report := guarded.IntoView(0)
+	if report.OK() {
+		t.Fatalf("unnamed failing guard must not pass: %#v", report)
+	}
+	if report.Failed == "" {
+		t.Fatalf("unnamed failing guard must report a failure label: %#v", report)
+	}
+	if got := view.Extract(); got != "" {
+		t.Fatalf("guarded failure exposed value %q", got)
 	}
 }

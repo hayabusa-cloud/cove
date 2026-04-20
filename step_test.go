@@ -5,9 +5,10 @@
 package cove_test
 
 import (
+	"testing"
+
 	"code.hybscloud.com/cove"
 	"code.hybscloud.com/kont"
-	"testing"
 )
 
 func TestCheckSuspensionFailure(t *testing.T) {
@@ -40,6 +41,9 @@ func TestStepWithContCompletion(t *testing.T) {
 	if sv.Suspension != nil {
 		t.Fatal("expected completion")
 	}
+	if sv.Ask() != "ctx" {
+		t.Fatalf("unexpected ctx: %v", sv.Ask())
+	}
 	if result != 42 {
 		t.Fatalf("unexpected result: %d", result)
 	}
@@ -59,6 +63,9 @@ func TestStepWithContSuspension(t *testing.T) {
 	result, sv := step.Resume(99)
 	if sv.Suspension != nil {
 		t.Fatal("expected completion after resume")
+	}
+	if sv.Ask() != "ctx" {
+		t.Fatalf("unexpected ctx after completion: %v", sv.Ask())
 	}
 	if result != 100 {
 		t.Fatalf("unexpected result: %d", result)
@@ -87,6 +94,9 @@ func TestSuspensionViewResumeChain(t *testing.T) {
 	if sv.Suspension != nil {
 		t.Fatal("expected completion")
 	}
+	if sv.Ask() != "ctx" {
+		t.Fatalf("unexpected ctx after final completion: %v", sv.Ask())
+	}
 	if result != 30 {
 		t.Fatalf("unexpected result: %d", result)
 	}
@@ -97,6 +107,9 @@ func TestStepExprWithCompletion(t *testing.T) {
 	result, sv := cove.StepExprWith("ctx", expr)
 	if sv.Suspension != nil {
 		t.Fatal("expected completion")
+	}
+	if sv.Ask() != "ctx" {
+		t.Fatalf("unexpected ctx: %v", sv.Ask())
 	}
 	if result != 42 {
 		t.Fatalf("unexpected result: %d", result)
@@ -130,6 +143,9 @@ func TestResumeWith(t *testing.T) {
 	if sv.Suspension != nil {
 		t.Fatal("expected completion")
 	}
+	if sv.Ask().N != 8 {
+		t.Fatalf("budget should have decremented on completion: got %d want 8", sv.Ask().N)
+	}
 	if result != 30 {
 		t.Fatalf("unexpected result: %d", result)
 	}
@@ -146,8 +162,39 @@ func TestResumeWithCompletion(t *testing.T) {
 	if sv.Suspension != nil {
 		t.Fatal("expected completion")
 	}
+	if sv.Ask() != 43 {
+		t.Fatalf("unexpected ctx after completion: %d", sv.Ask())
+	}
 	if result != 7 {
 		t.Fatalf("unexpected result: %d", result)
+	}
+}
+
+func TestMapContextSuspension(t *testing.T) {
+	_, step := cove.StepExprWith(7, kont.ExprPerform(ping{}))
+	if step.Suspension == nil {
+		t.Fatal("expected suspension")
+	}
+	mapped := cove.MapContextSuspension(step, func(v int) string { return "ctx" })
+	if mapped.Suspension != step.Suspension {
+		t.Fatal("expected suspension frontier to be preserved")
+	}
+	if mapped.Ask() != "ctx" {
+		t.Fatalf("unexpected mapped ctx: %v", mapped.Ask())
+	}
+}
+
+func TestWithContextSuspension(t *testing.T) {
+	_, step := cove.StepExprWith("old", kont.ExprPerform(ping{}))
+	if step.Suspension == nil {
+		t.Fatal("expected suspension")
+	}
+	replaced := cove.WithContextSuspension(step, "new")
+	if replaced.Suspension != step.Suspension {
+		t.Fatal("expected suspension frontier to be preserved")
+	}
+	if replaced.Ask() != "new" {
+		t.Fatalf("unexpected ctx: %v", replaced.Ask())
 	}
 }
 

@@ -7,13 +7,18 @@
 
 # cove
 
-Coalgebraic context layer for [kont](https://code.hybscloud.com/kont) suspensions in Go, the coeffect dual of kont's algebraic effects.
+Context layer for carrying explicit ambient context across [kont](https://code.hybscloud.com/kont) suspension boundaries
+in Go.
 
 ## Overview
 
-When an external runtime, such as a proactor, event loop, or dispatcher steps through kont suspensions one at a time, each suspended operation may need state that lives outside the operation itself: dispatch budget, ring capabilities, protocol phase, buffer-group validity. Without explicit context carriers, this state ends up in ad-hoc side maps or implicit globals that break composition.
+When an external runtime such as a proactor, event loop, or dispatcher steps through kont suspensions one at a time,
+each suspended operation may need state that lives outside the operation itself: dispatch budget, ring capabilities,
+protocol phase, buffer-group validity. Without explicit context carriers, that state ends up in ad-hoc side maps or
+implicit globals that break composition.
 
-cove pairs ambient context with values and suspensions so the context travels through async stepping boundaries as typed, composable data.
+cove pairs ambient context with values and suspensions so the context travels across asynchronous stepping boundaries as
+typed, composable data.
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
@@ -26,7 +31,7 @@ for sv.Suspension != nil {
 }
 ```
 
-The package is policy-free: it carries and checks context but never schedules, retries, or dispatches.
+The package is policy-free: it carries and checks context, but never schedules, retries, or dispatches.
 
 ## Installation
 
@@ -52,7 +57,8 @@ Requires Go 1.26+.
 
 ## Contextual Stepping
 
-`StepWith` and `StepExprWith` evaluate a kont computation and pair the first suspension with ambient context. Each suspension is affine: consume it exactly once via `Resume`, `ResumeWith`, or `Discard`.
+`StepWith` and `StepExprWith` evaluate a kont computation and pair its first suspension with ambient context. Each
+suspension is affine: consume it exactly once, via `Resume`, `ResumeWith`, or `Discard`.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -63,7 +69,8 @@ for sv.Suspension != nil {
 }
 ```
 
-`ResumeWith` evolves context between steps, for example by decrementing budget, updating capabilities, or advancing protocol phase:
+`ResumeWith` evolves the carried context between steps. For example, it can decrement budget, update capabilities, or
+advance protocol phase:
 
 ```go
 val, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
@@ -72,7 +79,21 @@ val, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
 })
 ```
 
-`ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without a requirement check. `CheckSuspension` and `CheckSuspensionExpr` add gated forms:
+`MapContextSuspension` and `WithContextSuspension` transport or replace the context carried on an already observed
+suspension, without changing the current suspension frontier:
+
+```go
+sv = cove.MapContextSuspension(sv, func (r Runtime) Runtime {
+r.Budget += 4
+return r
+})
+sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
+```
+
+Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` still returns the carried context.
+
+`ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without performing any requirement check.
+`CheckSuspension` and `CheckSuspensionExpr` provide gated forms:
 
 ```go
 sv, ok := cove.CheckSuspension(runtime, susp, func(r Runtime) bool {
@@ -99,11 +120,29 @@ val, sv = sv.Resume(result)
 
 `Step` and `StepExpr` re-export kont's evaluators without context binding.
 
+## Commands
+
+`Cmd[C, A, B]` is a contextual command `View[C, A] -> B`. `Run` applies a command to a concrete `View`; `ExtractCmd` is
+the identity command; `LiftCmd` lifts a focus-only map into the contextual world; `Compose` composes commands through
+`Extend`.
+
+```go
+cmd := cove.Compose(
+func (v cove.View[Runtime, int]) string {
+return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
+},
+cove.LiftCmd(func (n int) int { return n + 1 }),
+)
+out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
+_ = out // "budget=8 value=42"
+```
+
 ## Requirements
 
-Requirements are predicates over context, available in closure and data forms. Both support `All`/`Any`/`Not`, with `True` and `False` as the neutral elements for conjunction and disjunction.
+Requirements are predicates over the ambient context, available in both closure and data form. Both forms support `All`,
+`Any`, and `Not`, with `True` and `False` as the neutral elements of conjunction and disjunction.
 
-**Closure form** (`Req`) — direct and concise:
+**Closure form** (`Req`): direct and concise.
 
 ```go
 req := cove.All(
@@ -113,7 +152,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**Data form** (`ReqExpr`) — composable Boolean structure, avoids closure allocation on composition:
+**Data form** (`ReqExpr`): composable Boolean structure that avoids closure allocation during composition.
 
 ```go
 expr := cove.ExprAll(
@@ -125,17 +164,22 @@ ok := cove.NeedExpr(runtime, expr)
 
 Combinators: `All`/`ExprAll` (conjunction ∧), `Any`/`ExprAny` (disjunction ∨), `Not`/`ExprNot` (negation ¬), `True`/`ExprTrue` (⊤), `False`/`ExprFalse` (⊥).
 
-`Pullback` and `ExprPullback` transport requirements contravariantly along a context projection. Given f: C → D, `Pullback(req, f)` maps `Req[D]` to `Req[C]`. `ExprPullback` preserves Boolean structure and distributes over `ExprNot`, `ExprAll`, and `ExprAny`.
+`Pullback` and `ExprPullback` transport requirements contravariantly along a context projection. Given `f: C → D`,
+`Pullback(req, f)` maps `Req[D]` to `Req[C]`. `ExprPullback` preserves the Boolean structure and distributes over
+`ExprNot`, `ExprAll`, and `ExprAny`.
 
 ### Choosing Req vs ReqExpr
 
-Use `Req` for ad-hoc one-off predicates. Use `ReqExpr` when composing many requirements or when closure allocation at construction time matters.
+Use `Req` for ad-hoc, one-off predicates. Use `ReqExpr` when composing many requirements, or when closure allocation at
+construction time matters.
 
-Bridge helpers keep the two forms aligned: `ReifyReq` wraps a closure-form requirement as `ExprAtom`, so `ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-world requirement through a closure.
+Bridge helpers keep the two forms aligned: `ReifyReq` wraps a closure-form requirement as an `ExprAtom`, so
+`ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form requirement through a closure.
 
 ## Gated Values
 
-`Guard` pairs a value with a requirement; `IntoView` yields a `View` only when the context satisfies it:
+`Guard` pairs a value with a requirement; `IntoView` yields a `View` only when the ambient context satisfies that
+requirement:
 
 ```go
 checked := cove.Guard(canDispatch, payload)
@@ -154,7 +198,7 @@ if view, report := guarded.IntoView(runtime); report.OK() {
 }
 ```
 
-`CheckRules` and `CheckRulesExpr` evaluate multiple rules, stopping at the first failure:
+`CheckRules` and `CheckRulesExpr` evaluate several rules in order, stopping at the first failure:
 
 ```go
 report := cove.CheckRules(runtime, budgetRule, permRule)
@@ -163,7 +207,7 @@ if !report.OK() {
 }
 ```
 
-Expr-world diagnostics follow the same shape with `CheckRulesExpr` and `GuardRuleExpr`:
+The Expr-form diagnostic path has the same shape through `CheckRulesExpr` and `GuardRuleExpr`:
 
 ```go
 type Runtime struct{ Budget int }
@@ -183,7 +227,8 @@ if view, report := guardedExpr.IntoView(runtime); report.OK() {
 }
 ```
 
-Expr-world equivalents: `GuardExpr`, `GuardRuleExpr`, `CheckedExpr`, `GuardedExpr`. Map and pullback helpers: `MapChecked`, `MapGuarded`, `PullbackChecked`, `PullbackGuarded` (and their Expr variants).
+Expr-form equivalents: `GuardExpr`, `GuardRuleExpr`, `CheckedExpr`, `GuardedExpr`. Map and pullback helpers:
+`MapChecked`, `MapGuarded`, `PullbackChecked`, `PullbackGuarded` (and their Expr variants).
 
 ## View Operations
 
@@ -195,7 +240,8 @@ v.Ask()       // ambient context  (π₁)
 v.Extract()   // value in focus   (ε = π₂)
 ```
 
-Transformations: `Map` (functorial lift on A), `MapContext` (functorial lift on C), `Replace` (substitute value), `WithContext` (substitute context).
+Transformations: `Map` (functorial lift on `A`), `MapContext` (functorial lift on `C`), `Replace` (substitute the
+value), `WithContext` (substitute the context).
 
 `Duplicate` and `Extend` satisfy the comonad laws:
 
@@ -203,13 +249,14 @@ Transformations: `Map` (functorial lift on A), `MapContext` (functorial lift on 
 // Counit law:  ε ∘ δ = id
 cove.Duplicate(v).Extract() == v
 
-// CoKleisli identity:  extend(ε) = id
+// Extension identity:  extend(ε) = id
 cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 
 // Associativity:  extend(f) ∘ extend(g) = extend(f ∘ extend(g))
 ```
 
-`Extend` is coKleisli extension: given f: W(C,A) → B, it lifts f to W(C,A) → W(C,B) while preserving ambient context. The induced coKleisli composition with g: W(C,B) → D is g ∘ Extend(f).
+`Extend` is the contextual extension operator: given `f: W(C, A) → B`, it lifts `f` to `W(C, A) → W(C, B)` while
+preserving the ambient context. The induced command composition with `g: W(C, B) → D` is `g ∘ Extend(f)`.
 
 ## Ecosystem Position
 
@@ -223,19 +270,72 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 
 ## Formal Structure
 
-`View[C, A]` is an environment comonad (Uustalu & Vene 2008) with carrier C × A, counit ε = π₂ (Extract), and comultiplication δ(c, a) = (c, (c, a)) (Duplicate). `Extend` implements coKleisli extension.
+`View[C, A]` is an environment comonad (Uustalu & Vene 2008) with carrier C × A, counit ε = π₂ (Extract), and
+comultiplication δ(c, a) = (c, (c, a)) (Duplicate). `Extend` implements contextual extension (coKleisli extension in the
+categorical literature).
 
 `Req[C]` and `ReqExpr[C]` are objects in the Boolean algebra of predicates over C. `Pullback` implements the contravariant functor f* induced by a morphism f: C → D, mapping predicates on D to predicates on C. `ExprPullback` preserves the Boolean algebra structure: f*(p ∧ q) = f*(p) ∧ f*(q), f*(¬p) = ¬f*(p).
 
-kont models algebraic effects (free monad, handlers, fold). cove models coeffects (comonad, requirements, unfold). The two are categorical duals at the suspension boundary: kont asks what the computation does to the world; cove states what the computation needs from the world.
+kont models algebraic effects (free monad, handlers, fold); cove models coeffects (comonad, requirements, unfold). The
+two are categorical duals at the suspension boundary: kont describes what the computation does to the world, whereas
+cove states what the computation needs from the world.
 
-`ReqExpr` defunctionalizes the Boolean algebra into a tagged union — the initial algebra of the Boolean signature functor — so that requirement structure is inspectable data rather than opaque closures (Reynolds 1972).
+Read through the lens of modal effects, the carrier shape can be read as naming what happens to ambient context: kont (
+C → D) replaces it, cove (W(C, A) → B) handles it relatively, and pure pass-through preserves it. Effect structure rides
+on the carrier, not on a function colour, which keeps cove policy-free.
+
+`ReqExpr` defunctionalizes the Boolean algebra into a tagged union, namely the initial algebra of the Boolean signature
+functor, so that the structure of a requirement is inspectable data rather than an opaque closure (Reynolds 1972).
+
+## Practical Recipes
+
+A complete contextual computation typically proceeds in three stages: declare requirements, gate values against them,
+then observe the result under a concrete context.
+
+```go
+// 1. Declare a requirement on the ambient context.
+type Caps struct{ CanSubmit, HasToken bool }
+req := cove.All(
+func (c Caps) bool { return c.CanSubmit },
+func (c Caps) bool { return c.HasToken },
+)
+
+// 2. Gate a value on that requirement. This produces a Checked[Caps, T].
+checked := cove.Guard(req, payload)
+
+// 3. Reify into an Expr to step under different ambient contexts.
+expr := cove.ReifyReq(req)
+ok := cove.NeedExpr(Caps{CanSubmit: true, HasToken: true}, expr)
+_ = checked
+_ = ok
+```
+
+`Pullback` lets a caller adapt a requirement defined over one context so that it works over another (`Pullback(req, f)`
+for `f: D → C`); `MapChecked` and `MapGuarded` transport gated values through value-level transformations without
+re-checking the predicate. The combination `All` + `Pullback` + `Guard` is how downstream packages build typed
+capability checks without coupling to a single context type.
 
 ## References
 
-- Uustalu, T. & Vene, V. "Comonadic Notions of Computation." *CMCS 2008*, pp. 263–284. https://doi.org/10.1016/j.entcs.2008.05.029
-- Petricek, T., Orchard, D. & Mycroft, A. "Coeffects: A Calculus of Context-Dependent Computation." *ICFP 2014*, pp. 123–135. https://doi.org/10.1145/2628136.2628160
-- Reynolds, J.C. "Definitional Interpreters for Higher-Order Programming Languages." *ACM '72*, pp. 717–740. https://doi.org/10.1145/800194.805852
+- John C. Reynolds. 1972. Definitional Interpreters for Higher-Order Programming Languages. In *Proc. ACM Annual
+  Conference (ACM '72)*. 717–740. https://doi.org/10.1145/800194.805852
+- Tarmo Uustalu and Varmo Vene. 2008. Comonadic Notions of Computation. *Electronic Notes in Theoretical Computer
+  Science* 203, 5 (June 2008), 263–284. https://doi.org/10.1016/j.entcs.2008.05.029
+- Tomas Petricek, Dominic Orchard, and Alan Mycroft. 2014. Coeffects: A Calculus of Context-Dependent Computation. In
+  *Proc. 19th ACM SIGPLAN International Conference on Functional Programming (ICFP '14)*.
+  123–135. https://tomasp.net/academic/papers/structural/coeffects-icfp.pdf
+- Marco Gaboardi, Shin-ya Katsumata, Dominic Orchard, Flavien Breuvart, and Tarmo Uustalu. 2016. Combining Effects and
+  Coeffects via Grading. In *Proc. 21st ACM SIGPLAN International Conference on Functional Programming (ICFP '16)*.
+  476–489. https://doi.org/10.1145/2951913.2951939
+- Jonathan Immanuel Brachthäuser, Philipp Schuster, and Klaus Ostermann. 2020. Effects as Capabilities: Effect Handlers
+  and Lightweight Effect Polymorphism. *Proc. ACM on Programming Languages* 4, OOPSLA (Nov. 2020), Article 126, 30
+  pages. https://se.cs.uni-tuebingen.de/publications/brachthaeuser20effekt.pdf
+- Daniel Gratzer, G. A. Kavvos, Andreas Nuyts, and Lars Birkedal. 2021. Multimodal Dependent Type Theory. *Logical
+  Methods in Computer Science* 17, 3 (2021), Paper 11, 67 pages. https://doi.org/10.46298/lmcs-17(3:11)2021
+- Wenhao Tang, Leo White, Stephen Dolan, Daniel Hillerström, Sam Lindley, and Anton Lorenzen. 2025. Modal Effect Types.
+  *Proc. ACM Program. Lang.* 9, OOPSLA1 (Apr. 2025), Article 120, 1130–1157. https://arxiv.org/abs/2407.11816
+- Wenhao Tang and Sam Lindley. 2026. Rows and Capabilities as Modal Effects. *Proc. ACM Program. Lang.* 10, POPL (Jan.
+  2026), 923–950. https://arxiv.org/abs/2507.10301
 
 ## Platform Support
 

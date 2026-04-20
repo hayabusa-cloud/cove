@@ -6,12 +6,16 @@ package cove
 
 import "code.hybscloud.com/kont"
 
-// Reify bridges a Cont-world computation into the Expr world.
+// Reify converts a [kont.Cont] computation to [kont.Expr].
+// Prefer [StepWith] or [StepExprWith] when the caller needs the contextual
+// suspension boundary.
 func Reify[A Focus](m kont.Cont[Resumed, A]) kont.Expr[A] {
 	return kont.Reify(m)
 }
 
-// Reflect bridges an Expr-world computation into the Cont world.
+// Reflect converts a [kont.Expr] computation to [kont.Cont].
+// Prefer [StepWith] or [StepExprWith] when the caller needs the contextual
+// suspension boundary.
 func Reflect[A Focus](m kont.Expr[A]) kont.Cont[Resumed, A] {
 	return kont.Reflect(m)
 }
@@ -21,7 +25,7 @@ func ReifyReq[C Ambient](req Req[C]) ReqExpr[C] {
 	return ExprAtom[C](req)
 }
 
-// ReflectReq evaluates an Expr-world requirement through [NeedExpr].
+// ReflectReq returns a closure-form requirement that delegates to [NeedExpr].
 func ReflectReq[C Ambient](expr ReqExpr[C]) Req[C] {
 	return func(ctx C) bool { return NeedExpr(ctx, expr) }
 }
