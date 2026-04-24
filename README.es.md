@@ -93,6 +93,12 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 Una vez completada la computación, `sv.Suspension` pasa a ser nil, pero `sv.Ask()` sigue devolviendo el contexto
 transportado.
 
+cove reenvía el clasificador de stepping de kont, por lo que `Step`, `StepExpr`, `StepWith`, `StepExprWith`, `Resume` y
+`ResumeWith` heredan la convención de finalización con nil de kont: un valor final nil indica finalización con el
+valor cero de `A`. Por tanto, las computaciones cuyo tipo de resultado sea un puntero o una interfaz no pueden usar
+nil como valor final significativo; envuelve nil en un tipo suma o testigo explícito cuando esa distinción sea
+relevante. El contexto del portador no se ve afectado.
+
 `ObserveSuspension` adjunta contexto ambiental a una `kont.Suspension` existente sin realizar ninguna comprobación de
 requisitos. `CheckSuspension` y `CheckSuspensionExpr` proporcionan las variantes condicionadas:
 

@@ -58,6 +58,15 @@
 //   - [SuspensionView.ResumeWith] advances a suspension and evolves context for the next step
 //   - [CheckSuspension] / [CheckSuspensionExpr] gate contextualization on a requirement
 //
+// Nil-completion convention: cove forwards [kont]'s stepping classifier, so
+// [Step], [StepExpr], [StepWith], [StepExprWith], [SuspensionView.Resume], and
+// [SuspensionView.ResumeWith] inherit the rule that a nil completed value
+// signals completion with the zero value of A. Computations whose result type
+// A is a pointer or interface therefore cannot use nil as a meaningful
+// completed value; wrap nil in an explicit sum or witness type when that
+// distinction matters. Carrier context is unaffected: [SuspensionView.Ask]
+// still returns the ambient context after completion.
+//
 // Bridge helpers:
 //
 //   - [Step], [StepExpr], [Reify], [Reflect], [ReifyReq], and [ReflectReq] remain available as convenience wrappers around kont
