@@ -134,7 +134,7 @@ func StepExpr[A Focus](m kont.Expr[A]) (A, *kont.Suspension[A]) {
 
 // StepWith runs a Cont computation and pairs its first suspension with ctx.
 // It is the primary contextual stepping entry point. Completion is observed
-// when the returned [SuspensionView].Suspension is nil; in that case, the
+// when the returned [SuspensionView.Suspension] is nil; in that case, the
 // result A follows kont's nil-completion convention (nilable types cannot
 // use nil as a meaningful completed payload without an explicit witness).
 func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, SuspensionView[C, A]) {
@@ -144,8 +144,8 @@ func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, Suspension
 
 // StepExprWith runs an Expr computation and pairs its first suspension with ctx.
 // It is the primary contextual stepping entry point for callers already in Expr
-// form. Completion is observed when the returned [SuspensionView].Suspension is
-// nil; in that case, the result A follows kont's nil-completion convention
+// form. Completion is observed when the returned [SuspensionView.Suspension]
+// is nil; in that case, the result A follows kont's nil-completion convention
 // (nilable types cannot use nil as a meaningful completed payload without an
 // explicit witness).
 func StepExprWith[C Ambient, A Focus](ctx C, m kont.Expr[A]) (A, SuspensionView[C, A]) {
