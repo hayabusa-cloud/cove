@@ -60,12 +60,16 @@
 //
 // Nil-completion convention: cove forwards [kont]'s stepping classifier, so
 // [Step], [StepExpr], [StepWith], [StepExprWith], [SuspensionView.Resume], and
-// [SuspensionView.ResumeWith] inherit the rule that a nil completed value
-// signals completion with the zero value of A. Computations whose result type
-// A is a pointer or interface therefore cannot use nil as a meaningful
-// completed value; wrap nil in an explicit sum or witness type when that
-// distinction matters. Carrier context is unaffected: [SuspensionView.Ask]
-// still returns the ambient context after completion.
+// [SuspensionView.ResumeWith] report completion by yielding no further
+// suspension frontier (a nil suspension or [SuspensionView] result). The
+// completed payload returned in that case is the zero value of A. Suspended
+// steps may also return the zero value of A, so callers must use the
+// suspension/frontier result—not A itself—to detect completion. Computations
+// whose result type A is a nilable type (pointer, interface, map, slice,
+// channel, or function) therefore cannot use nil as a meaningful completed
+// value; wrap nil in an explicit sum or witness type when that distinction
+// matters. Carrier context is unaffected: [SuspensionView.Ask] still returns
+// the ambient context after completion.
 //
 // Bridge helpers:
 //

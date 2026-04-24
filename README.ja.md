@@ -87,9 +87,11 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 計算が完了すると `sv.Suspension` は nil になるが、`sv.Ask()` は運ばれてきたコンテキストをなお返す。
 
 cove は kont のステッピング分類器をそのまま転送するため、`Step`、`StepExpr`、`StepWith`、`StepExprWith`、`Resume`、
-`ResumeWith` は kont の nil 完了規約を継承する。すなわち、完了値が nil の場合は `A` のゼロ値で完了したことを意味する。
-したがって結果型がポインタやインタフェースである計算では、nil を意味のある完了値として用いることはできない。その区別が
-必要な場合は、nil を明示的な直和型や証拠型でラップすること。担い手のコンテキストには影響しない。
+`ResumeWith` は kont の nil 完了規約を継承する。すなわち、完了は nil サスペンションによって示され、その場合の完了値は kont
+の nil 完了規約（完了値が nil の場合は `A` のゼロ値で完了したことを意味する）に従う。
+したがって結果型が nil 可能型（ポインタ、インタフェース、マップ、スライス、チャネル、関数）である計算では、nil を意味の
+ある完了値として用いることはできない。その区別が必要な場合は、nil を明示的な直和型や証拠型でラップすること。担い手の
+コンテキストには影響しない。
 
 `ObserveSuspension` は既存の `kont.Suspension` に、要件チェックを行わずに環境コンテキストを付与する。`CheckSuspension` と
 `CheckSuspensionExpr` はそのゲート付き版である：
