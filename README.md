@@ -92,6 +92,13 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` still returns the carried context.
 
+cove forwards kont's stepping classifier, so `Step`, `StepExpr`, `StepWith`, `StepExprWith`, `Resume`, and `ResumeWith`
+inherit kont's nil-completion convention: completion is observed by a nil suspension result, and on completion the
+returned value is the zero value of `A`. Suspended steps may also return the zero value of `A`, so callers must use the
+suspension result—not `A` itself—to distinguish completion from suspension. Computations whose result type is a nilable
+type (pointer, interface, map, slice, channel, or function) therefore cannot use nil as a meaningful completed value;
+wrap nil in an explicit sum or witness type when that distinction matters. Carrier context is unaffected.
+
 `ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without performing any requirement check.
 `CheckSuspension` and `CheckSuspensionExpr` provide gated forms:
 
@@ -122,9 +129,9 @@ val, sv = sv.Resume(result)
 
 ## Commands
 
-`Cmd[C, A, B]` is a contextual command `View[C, A] -> B`. `Run` applies a command to a concrete `View`; `ExtractCmd` is
+`Cmd[C, A, B]` is the coKleisli arrow `View[C, A] -> B`. `Run` applies a command to a concrete `View`; `ExtractCmd` is
 the identity command; `LiftCmd` lifts a focus-only map into the contextual world; `Compose` composes commands through
-`Extend`.
+`Extend`, satisfying `Compose(g, f)(v) == g(Extend(v, f))`.
 
 ```go
 cmd := cove.Compose(
@@ -173,8 +180,9 @@ Combinators: `All`/`ExprAll` (conjunction ∧), `Any`/`ExprAny` (disjunction ∨
 Use `Req` for ad-hoc, one-off predicates. Use `ReqExpr` when composing many requirements, or when closure allocation at
 construction time matters.
 
-Bridge helpers keep the two forms aligned: `ReifyReq` wraps a closure-form requirement as an `ExprAtom`, so
-`ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form requirement through a closure.
+Bridge helpers keep the two forms aligned: `ReifyReq` is a lossy quotation helper that wraps a closure-form requirement
+as an `ExprAtom`, so `ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form
+requirement through a closure rather than recovering its original structure.
 
 ## Gated Values
 

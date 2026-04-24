@@ -76,6 +76,10 @@ func (v SuspensionView[C, A]) pending() *kont.Suspension[A] {
 func (v SuspensionView[C, A]) Op() Operation { return v.pending().Op() }
 
 // Resume advances the suspension and keeps the current context.
+// When the resumed computation completes, the returned value follows kont's
+// nil-completion convention: a nil completed payload becomes the zero value of A.
+// Callers must use the returned [SuspensionView] (which has a nil suspension on
+// completion) to detect completion, rather than testing the value of A.
 // It panics after completion.
 func (v SuspensionView[C, A]) Resume(value Resumed) (A, SuspensionView[C, A]) {
 	return v.ResumeWith(value, nil)
@@ -83,6 +87,10 @@ func (v SuspensionView[C, A]) Resume(value Resumed) (A, SuspensionView[C, A]) {
 
 // ResumeWith advances the suspension and optionally maps the context for the
 // next step.
+// When the resumed computation completes, the returned value follows kont's
+// nil-completion convention: a nil completed payload becomes the zero value of A.
+// Callers must use the returned [SuspensionView] (which has a nil suspension on
+// completion) to detect completion, rather than testing the value of A.
 // It panics after completion.
 // A nil mapper keeps the current context, so ResumeWith strictly generalizes
 // [Resume].
@@ -108,20 +116,27 @@ func (v SuspensionView[C, A]) Discard() {
 
 // Step re-exports [kont.Step].
 // Prefer [StepWith] when the suspension should remain paired with explicit
-// context.
+// context. As with [kont.Step], a nil suspension result denotes completion;
+// the returned A follows kont's nil-completion convention (a nil payload
+// becomes the zero value of A).
 func Step[A Focus](m kont.Cont[Resumed, A]) (A, *kont.Suspension[A]) {
 	return kont.Step(m)
 }
 
 // StepExpr re-exports [kont.StepExpr].
 // Prefer [StepExprWith] when the suspension should remain paired with explicit
-// context.
+// context. As with [kont.StepExpr], a nil suspension result denotes completion;
+// the returned A follows kont's nil-completion convention (a nil payload
+// becomes the zero value of A).
 func StepExpr[A Focus](m kont.Expr[A]) (A, *kont.Suspension[A]) {
 	return kont.StepExpr(m)
 }
 
 // StepWith runs a Cont computation and pairs its first suspension with ctx.
-// It is the primary contextual stepping entry point.
+// It is the primary contextual stepping entry point. Completion is observed
+// when the returned [SuspensionView.Suspension] is nil; in that case, the
+// result A follows kont's nil-completion convention (nilable types cannot
+// use nil as a meaningful completed payload without an explicit witness).
 func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, SuspensionView[C, A]) {
 	result, susp := kont.Step(m)
 	return result, ObserveSuspension(ctx, susp)
@@ -129,7 +144,10 @@ func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, Suspension
 
 // StepExprWith runs an Expr computation and pairs its first suspension with ctx.
 // It is the primary contextual stepping entry point for callers already in Expr
-// form.
+// form. Completion is observed when the returned [SuspensionView.Suspension]
+// is nil; in that case, the result A follows kont's nil-completion convention
+// (nilable types cannot use nil as a meaningful completed payload without an
+// explicit witness).
 func StepExprWith[C Ambient, A Focus](ctx C, m kont.Expr[A]) (A, SuspensionView[C, A]) {
 	result, susp := kont.StepExpr(m)
 	return result, ObserveSuspension(ctx, susp)

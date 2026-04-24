@@ -86,6 +86,11 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 计算完成后，`sv.Suspension` 变为 nil，但 `sv.Ask()` 仍返回所携带的上下文。
 
+cove 直接转发 kont 的步进分类器，因此 `Step`、`StepExpr`、`StepWith`、`StepExprWith`、`Resume`、`ResumeWith` 继承了
+kont 的 nil 完成约定：完成通过 nil Suspension（暂挂）观测，在这种情况下，完成值遵循 kont 的 nil 完成约定
+（完成值为 nil 表示以 `A` 的零值完成）。因此，结果类型为可空类型（指针、接口、映射、切片、通道或函数）的计算不能
+将 nil 当作有意义的完成值；当需要区分这一情形时，请将 nil 包裹在显式的求和类型或见证类型中。所携带的上下文不受影响。
+
 `ObserveSuspension` 在不进行任何需求检查的前提下，为已有的 `kont.Suspension` 附加环境上下文。`CheckSuspension` 与
 `CheckSuspensionExpr` 提供带门控的对应版本：
 

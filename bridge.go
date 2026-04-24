@@ -20,12 +20,17 @@ func Reflect[A Focus](m kont.Expr[A]) kont.Cont[Resumed, A] {
 	return kont.Reflect(m)
 }
 
-// ReifyReq wraps a [Req] as an [ExprAtom].
+// ReifyReq wraps a closure-form [Req] as an [ExprAtom].
+// It is a lossy quotation helper for bridging into Expr-world composition, not a
+// structural inverse of [ReflectReq]. In particular, ReifyReq(nil) is invalid
+// and panics when the resulting expression is evaluated through [NeedExpr].
 func ReifyReq[C Ambient](req Req[C]) ReqExpr[C] {
 	return ExprAtom[C](req)
 }
 
 // ReflectReq returns a closure-form requirement that delegates to [NeedExpr].
+// It preserves the observable predicate, but once converted back to [Req] the
+// original Expr structure is no longer recoverable from the closure alone.
 func ReflectReq[C Ambient](expr ReqExpr[C]) Req[C] {
 	return func(ctx C) bool { return NeedExpr(ctx, expr) }
 }
