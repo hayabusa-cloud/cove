@@ -93,11 +93,11 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` still returns the carried context.
 
 cove forwards kont's stepping classifier, so `Step`, `StepExpr`, `StepWith`, `StepExprWith`, `Resume`, and `ResumeWith`
-inherit kont's nil-completion convention: completion is observed by a nil suspension result, in which case the completed
-value follows kont's nil-completion convention (a nil value denotes the zero value of `A`). Computations whose result
-type is a nilable type (pointer, interface, map, slice, channel, or function) therefore cannot use nil as a meaningful
-completed value; wrap nil in an explicit sum or witness type when that distinction matters. Carrier context is
-unaffected.
+inherit kont's nil-completion convention: completion is observed by a nil suspension result, and on completion the
+returned value is the zero value of `A`. Suspended steps may also return the zero value of `A`, so callers must use the
+suspension result—not `A` itself—to distinguish completion from suspension. Computations whose result type is a nilable
+type (pointer, interface, map, slice, channel, or function) therefore cannot use nil as a meaningful completed value;
+wrap nil in an explicit sum or witness type when that distinction matters. Carrier context is unaffected.
 
 `ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without performing any requirement check.
 `CheckSuspension` and `CheckSuspensionExpr` provide gated forms:
