@@ -119,6 +119,7 @@ func TestExprPullback(t *testing.T) {
 func TestExprPullbackComposition(t *testing.T) {
 	type inner struct{ Value int }
 	type outer struct{ Inner inner }
+	type envelope struct{ Outer outer }
 	atom := cove.ExprAtom(func(v int) bool { return v > 0 })
 	step1 := cove.ExprPullback(atom, func(i inner) int { return i.Value })
 	step2 := cove.ExprPullback(step1, func(o outer) inner { return o.Inner })
@@ -127,6 +128,14 @@ func TestExprPullbackComposition(t *testing.T) {
 	}
 	if cove.NeedExpr(outer{Inner: inner{Value: -1}}, step2) {
 		t.Fatal("double pullback should fail for negative inner")
+	}
+
+	step3 := cove.ExprPullback(step2, func(e envelope) outer { return e.Outer })
+	if !cove.NeedExpr(envelope{Outer: outer{Inner: inner{Value: 8}}}, step3) {
+		t.Fatal("triple pullback should pass for positive nested value")
+	}
+	if cove.NeedExpr(envelope{Outer: outer{Inner: inner{Value: -8}}}, step3) {
+		t.Fatal("triple pullback should fail for negative nested value")
 	}
 }
 

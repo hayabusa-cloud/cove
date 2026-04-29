@@ -43,17 +43,25 @@ Requires Go 1.26+.
 
 ## Core Types
 
-| Type | Purpose                                                       |
-|------|---------------------------------------------------------------|
-| `View[C, A]` | Comonadic carrier: value A under ambient context C            |
-| `SuspensionView[C, A]` | kont suspension paired with ambient context                   |
-| `Req[C]` | Contravariant predicate over C (closure form): `func(C) bool` |
-| `ReqExpr[C]` | Contravariant predicate over C (defunctionalized form)        |
-| `Rule[C]` / `RuleExpr[C]` | Named predicate with diagnostic `Report`                      |
-| `Checked[C, A]` / `CheckedExpr[C, A]` | Value gated by a requirement                                  |
-| `Guarded[C, A]` / `GuardedExpr[C, A]` | Value gated by a named rule                                   |
+| Type                                                | Purpose                                                         |
+|-----------------------------------------------------|-----------------------------------------------------------------|
+| `View[C, A]`                                        | Comonadic carrier: value A under ambient context C              |
+| `SuspensionView[C, A]`                              | kont suspension paired with ambient context                     |
+| `World`                                             | Kripke reading of an ambient context type                       |
+| `StepIndex`                                         | Finite approximation level for step-indexed observation         |
+| `Preorder[C]`                                       | Kripke world-extension relation `w <= w'` with local law checks |
+| `Transition[C]`                                     | Concrete candidate edge between two Kripke worlds               |
+| `Forcing[C]` / `ForcingExpr[C]`                     | Requirement plus world preorder with monotonicity checks        |
+| `Relation[C, A]`                                    | Step-indexed Kripke relation over world, index, and value       |
+| `IndexedView[C, A]` / `IndexedSuspensionView[C, A]` | Contextual observations paired with explicit step credit        |
+| `Req[C]`                                            | Contravariant predicate over C (closure form): `func(C) bool`   |
+| `ReqExpr[C]`                                        | Contravariant predicate over C (defunctionalized form)          |
+| `Rule[C]` / `RuleExpr[C]`                           | Named predicate with diagnostic `Report`                        |
+| `Checked[C, A]` / `CheckedExpr[C, A]`               | Value gated by a requirement                                    |
+| `Guarded[C, A]` / `GuardedExpr[C, A]`               | Value gated by a named rule                                     |
 
-`Ambient` constrains context type parameters (C, D). `Focus` constrains value type parameters (A, B).
+`Ambient` constrains context type parameters (C, D). `World` gives the same structural constraint the Kripke vocabulary,
+and `Focus` constrains value type parameters (A, B).
 
 ## Contextual Stepping
 
@@ -127,6 +135,57 @@ val, sv = sv.Resume(result)
 
 `Step` and `StepExpr` re-export kont's evaluators without context binding.
 
+## Step-Indexed Kripke Evidence
+
+`cove` can make the Kripke reading explicit without turning context into scheduler policy. A `Preorder[C]` defines world
+extension and exposes `Extends`, `ReflexiveAt`, and `TransitiveAt` checks; `Transition[C]`, `CheckTransition`,
+`CheckForcingTransition`, and `CheckInvariantTransition` check concrete world edges; `Forcing` pairs a requirement with
+that preorder; and `Relation` indexes semantic validity by world, finite `StepIndex`, and value.
+
+Use `DiscreteWorlds` for equality-only worlds and `TotalWorlds` for a preorder that relates every world pair.
+`ForceExpr` mirrors `Force` for `ReqExpr`; `CheckRelation`, `WeakenIndexedView`, and `WeakenIndexedSuspension` make
+relation checks and step-credit weakening explicit.
+
+```go
+type RuntimeWorld struct {
+	Epoch uint64
+}
+
+leq := func(w, next RuntimeWorld) bool {
+	return w.Epoch <= next.Epoch
+}
+_ = cove.Preorder[RuntimeWorld](leq).ReflexiveAt(RuntimeWorld{Epoch: 1})
+_ = cove.Preorder[RuntimeWorld](leq).TransitiveAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2}, RuntimeWorld{Epoch: 3})
+
+canObserve := cove.Force(leq, func(w RuntimeWorld) bool {
+	return w.Epoch > 0
+})
+_ = canObserve.MonotoneAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2})
+
+rel := cove.Relate(leq, func(w RuntimeWorld, n cove.StepIndex, value int) bool {
+	return uint64(n) <= w.Epoch && value >= 0
+})
+later := cove.Later(rel)
+_ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
+```
+
+For operational prefixes, `StepWithIndex` and `StepExprWithIndex` pair a `SuspensionView` with explicit fuel. Each
+indexed `Resume` consumes one unit of step credit, making finite observations visibly decrease. Use `ResumeTo` when the
+successor context must be checked as a Kripke world extension; `CheckCompletedRelation` checks the final relation at a
+completed indexed frontier:
+
+```go
+_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+var val int
+for sv.Extract() != nil {
+	result := dispatch(sv.Ask(), sv.Op())
+	next := sv.Ask()
+	next.Epoch++
+	val, sv = sv.ResumeTo(leq, result, next)
+}
+_ = cove.CheckCompletedRelation(sv, val, rel)
+```
+
 ## Commands
 
 `Cmd[C, A, B]` is the coKleisli arrow `View[C, A] -> B`. `Run` applies a command to a concrete `View`; `ExtractCmd` is
@@ -135,10 +194,10 @@ the identity command; `LiftCmd` lifts a focus-only map into the contextual world
 
 ```go
 cmd := cove.Compose(
-func (v cove.View[Runtime, int]) string {
-return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
-},
-cove.LiftCmd(func (n int) int { return n + 1 }),
+	func(v cove.View[Runtime, int]) string {
+		return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
+	},
+	cove.LiftCmd(func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
@@ -268,13 +327,13 @@ preserving the ambient context. The induced command composition with `g: W(C, B)
 
 ## Ecosystem Position
 
-| Package | Owns | Categorical Aspect |
-|---------|------|--------------------|
-| `kont` | Effect operations, handlers, suspension and resumption | Algebra / Free monad / Fold |
-| **`cove`** | **Ambient context across suspension boundaries** | **Coalgebra / Comonad / Unfold** |
-| `takt` | Proactor dispatch, outcome classification, event loop | Comodel (handler dual) |
-| `uring` | Kernel I/O: SQE/CQE, ring management, buffer rings | — |
-| `iox` | Outcome algebra and error semantics | — |
+| Package    | Owns                                                   | Categorical Aspect               |
+|------------|--------------------------------------------------------|----------------------------------|
+| `kont`     | Effect operations, handlers, suspension and resumption | Algebra / Free monad / Fold      |
+| **`cove`** | **Ambient context across suspension boundaries**       | **Coalgebra / Comonad / Unfold** |
+| `takt`     | Proactor dispatch, stepping and runner observation     | Comodel (handler dual)           |
+| `uring`    | Kernel I/O: SQE/CQE, ring management, buffer rings     | —                                |
+| `iox`      | Outcome algebra and error semantics                    | —                                |
 
 ## Formal Structure
 

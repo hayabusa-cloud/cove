@@ -43,17 +43,25 @@ Requiere Go 1.26+.
 
 ## Tipos principales
 
-| Tipo                                  | Propósito                                                         |
-|---------------------------------------|-------------------------------------------------------------------|
-| `View[C, A]`                          | Portador comonádico: valor A bajo contexto ambiental C            |
-| `SuspensionView[C, A]`                | Suspensión kont emparejada con contexto ambiental                 |
-| `Req[C]`                              | Predicado contravariante sobre C (forma clausura): `func(C) bool` |
-| `ReqExpr[C]`                          | Predicado contravariante sobre C (forma desfuncionalizada)        |
-| `Rule[C]` / `RuleExpr[C]`             | Predicado nombrado con `Report` de diagnóstico                    |
-| `Checked[C, A]` / `CheckedExpr[C, A]` | Valor controlado por un requisito                                 |
-| `Guarded[C, A]` / `GuardedExpr[C, A]` | Valor controlado por una regla nombrada                           |
+| Tipo                                                | Propósito                                                                      |
+|-----------------------------------------------------|--------------------------------------------------------------------------------|
+| `View[C, A]`                                        | Portador comonádico: valor A bajo contexto ambiental C                         |
+| `SuspensionView[C, A]`                              | Suspensión kont emparejada con contexto ambiental                              |
+| `World`                                             | Lectura Kripke de un tipo de contexto ambiental                                |
+| `StepIndex`                                         | Nivel finito de aproximación para observación step-indexed                     |
+| `Preorder[C]`                                       | Relación de extensión de mundos Kripke `w <= w'` con chequeos locales de leyes |
+| `Transition[C]`                                     | Arista candidata concreta entre dos mundos Kripke                              |
+| `Forcing[C]` / `ForcingExpr[C]`                     | Requisito con preorden de mundos y comprobaciones de monotonía                 |
+| `Relation[C, A]`                                    | Relación Kripke step-indexed sobre mundo, índice y valor                       |
+| `IndexedView[C, A]` / `IndexedSuspensionView[C, A]` | Observaciones contextuales con crédito de pasos explícito                      |
+| `Req[C]`                                            | Predicado contravariante sobre C (forma clausura): `func(C) bool`              |
+| `ReqExpr[C]`                                        | Predicado contravariante sobre C (forma desfuncionalizada)                     |
+| `Rule[C]` / `RuleExpr[C]`                           | Predicado nombrado con `Report` de diagnóstico                                 |
+| `Checked[C, A]` / `CheckedExpr[C, A]`               | Valor controlado por un requisito                                              |
+| `Guarded[C, A]` / `GuardedExpr[C, A]`               | Valor controlado por una regla nombrada                                        |
 
-`Ambient` restringe parámetros de tipo de contexto (C, D). `Focus` restringe parámetros de tipo de valor (A, B).
+`Ambient` restringe parámetros de tipo de contexto (C, D). `World` da a la misma restricción estructural el vocabulario
+Kripke, y `Focus` restringe parámetros de tipo de valor (A, B).
 
 ## Stepping contextual
 
@@ -127,6 +135,57 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` y `StepExpr` reexportan los evaluadores de kont sin vincular contexto.
+
+## Evidencia Kripke step-indexed
+
+`cove` puede hacer explícita la lectura Kripke sin convertir el contexto en política de scheduling. `Preorder[C]` define
+la extensión de mundos y expone chequeos locales `Extends`, `ReflexiveAt` y `TransitiveAt`; `Transition[C]`,
+`CheckTransition`, `CheckForcingTransition` y `CheckInvariantTransition` comprueban aristas concretas; `Forcing`
+empareja un requisito con ese preorden, y `Relation` indexa la validez semántica por mundo, `StepIndex` finito y valor.
+
+Use `DiscreteWorlds` para mundos relacionados solo por igualdad y `TotalWorlds` para un preorden que relaciona todo par
+de mundos. `ForceExpr` refleja `Force` para `ReqExpr`; `CheckRelation`, `WeakenIndexedView` y `WeakenIndexedSuspension`
+hacen explícitos los chequeos de relación y el debilitamiento del crédito de pasos.
+
+```go
+type RuntimeWorld struct {
+    Epoch uint64
+}
+
+leq := func(w, next RuntimeWorld) bool {
+    return w.Epoch <= next.Epoch
+}
+_ = cove.Preorder[RuntimeWorld](leq).ReflexiveAt(RuntimeWorld{Epoch: 1})
+_ = cove.Preorder[RuntimeWorld](leq).TransitiveAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2}, RuntimeWorld{Epoch: 3})
+
+canObserve := cove.Force(leq, func(w RuntimeWorld) bool {
+    return w.Epoch > 0
+})
+_ = canObserve.MonotoneAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2})
+
+rel := cove.Relate(leq, func(w RuntimeWorld, n cove.StepIndex, value int) bool {
+    return uint64(n) <= w.Epoch && value >= 0
+})
+later := cove.Later(rel)
+_ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
+```
+
+Para prefijos operacionales, `StepWithIndex` y `StepExprWithIndex` emparejan un `SuspensionView` con fuel explícito.
+Cada `Resume` indexado consume una unidad de crédito de paso, haciendo visible el descenso de las observaciones finitas.
+Use `ResumeTo` cuando el contexto sucesor deba verificarse como extensión de mundo Kripke; `CheckCompletedRelation`
+comprueba la relación final en una frontera indexada completada:
+
+```go
+_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+var val int
+for sv.Extract() != nil {
+    result := dispatch(sv.Ask(), sv.Op())
+    next := sv.Ask()
+    next.Epoch++
+    val, sv = sv.ResumeTo(leq, result, next)
+}
+_ = cove.CheckCompletedRelation(sv, val, rel)
+```
 
 ## Comandos
 
@@ -269,13 +328,13 @@ contexto ambiental. La composición de comandos inducida con `g: W(C, B) → D` 
 
 ## Posición en el ecosistema
 
-| Paquete | Responsabilidad | Aspecto categórico |
-|---------|-----------------|--------------------|
-| `kont` | Operaciones de efectos, manejadores, suspensión y reanudación | Álgebra / Mónada libre / Pliegue |
-| **`cove`** | **Contexto ambiental a través de fronteras de suspensión** | **Coálgebra / Comónada / Despliegue** |
-| `takt` | Dispatch proactor, clasificación de resultados, bucle de eventos | Comodelo (dual del manejador) |
-| `uring` | I/O del kernel: SQE/CQE, gestión de anillos, anillos de buffers | — |
-| `iox` | Álgebra de resultados y semántica de errores | — |
+| Paquete    | Responsabilidad                                                 | Aspecto categórico                    |
+|------------|-----------------------------------------------------------------|---------------------------------------|
+| `kont`     | Operaciones de efectos, manejadores, suspensión y reanudación   | Álgebra / Mónada libre / Pliegue      |
+| **`cove`** | **Contexto ambiental a través de fronteras de suspensión**      | **Coálgebra / Comónada / Despliegue** |
+| `takt`     | Dispatch proactor, stepping y observación del runner            | Comodelo (dual del manejador)         |
+| `uring`    | I/O del kernel: SQE/CQE, gestión de anillos, anillos de buffers | —                                     |
+| `iox`      | Álgebra de resultados y semántica de errores                    | —                                     |
 
 ## Estructura formal
 
