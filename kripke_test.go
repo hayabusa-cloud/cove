@@ -316,6 +316,17 @@ func TestIndexedSuspensionViewRejectsZeroFuelResume(t *testing.T) {
 	step.Discard()
 }
 
+func TestIndexedSuspensionViewRejectsZeroFuelResumeTo(t *testing.T) {
+	_, step := cove.StepExprWithIndex(kripkeWorld{}, 0, kont.ExprPerform(ping{}))
+	if step.Extract() == nil {
+		t.Fatal("expected suspension")
+	}
+	expectPanicMessage(t, "kont: step index exhausted", func() {
+		step.ResumeTo(cove.TotalWorlds[kripkeWorld](), 1, kripkeWorld{})
+	})
+	step.Discard()
+}
+
 func TestIndexedSuspensionViewResumeToChecksWorldExtension(t *testing.T) {
 	leq := cove.Preorder[kripkeWorld](kripkeLeq)
 	_, step := cove.StepExprWithIndex(kripkeWorld{Budget: 1}, 1, kont.ExprPerform(ping{}))
