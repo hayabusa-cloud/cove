@@ -91,9 +91,9 @@ val, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
 suspension, without changing the current suspension frontier:
 
 ```go
-sv = cove.MapContextSuspension(sv, func (r Runtime) Runtime {
-r.Budget += 4
-return r
+sv = cove.MapContextSuspension(sv, func(r Runtime) Runtime {
+	r.Budget += 4
+	return r
 })
 sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 ```
@@ -363,8 +363,8 @@ then observe the result under a concrete context.
 // 1. Declare a requirement on the ambient context.
 type Caps struct{ CanSubmit, HasToken bool }
 req := cove.All(
-func (c Caps) bool { return c.CanSubmit },
-func (c Caps) bool { return c.HasToken },
+	func(c Caps) bool { return c.CanSubmit },
+	func(c Caps) bool { return c.HasToken },
 )
 
 // 2. Gate a value on that requirement. This produces a Checked[Caps, T].
