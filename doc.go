@@ -38,6 +38,10 @@
 //   - [View[C, A]], a focused value paired with ambient context
 //   - [Cmd[C, A, B]], a contextual command over [View]
 //   - [SuspensionView[C, A]], a [kont.Suspension] paired with ambient context
+//   - [World], [StepIndex], [Preorder[C]], [Transition[C]], [Forcing[C]],
+//     [ForcingExpr[C]], [Indexed[C, A]], and [Relation[C, A]], step-indexed Kripke evidence over ambient worlds
+//   - [IndexedView[C, A]] and [IndexedSuspensionView[C, A]], contextual
+//     observations paired with explicit finite step credit
 //   - [Req[C]] / [ReqExpr[C]], context predicates in closure and data forms
 //   - [Rule[C]] / [RuleExpr[C]] with [Report], named predicates for diagnostics
 //   - [Checked[C, A]] / [CheckedExpr[C, A]], requirement-gated values
@@ -53,10 +57,27 @@
 // Contextual suspension boundary:
 //
 //   - [StepWith] / [StepExprWith] run a kont computation and pair its first suspension with context
+//   - [StepWithIndex] / [StepExprWithIndex] do the same with explicit step credit
 //   - [MapContextSuspension] / [WithContextSuspension] map or replace carried context explicitly
 //   - [SuspensionView.Op] / [SuspensionView.Resume] expose the structural join point consumed by takt
 //   - [SuspensionView.ResumeWith] advances a suspension and evolves context for the next step
+//   - [IndexedSuspensionView.ResumeWith] additionally decrements the step index
+//   - [IndexedSuspensionView.ResumeTo] decrements the index and checks monotone world extension
 //   - [CheckSuspension] / [CheckSuspensionExpr] gate contextualization on a requirement
+//
+// Kripke structure:
+//
+//   - [World] names the Kripke reading of ambient context
+//   - [Preorder[C]] names world extension, w <= w'
+//   - [DiscreteWorlds] and [TotalWorlds] provide equality-only and total preorders
+//   - [Extends] is the package-level world-extension helper
+//   - [Preorder.Extends], [Preorder.ReflexiveAt], and [Preorder.TransitiveAt] expose concrete preorder law checks
+//   - [Transition[C]], [CheckTransition], [CheckForcingTransition], and [CheckInvariantTransition] check concrete world edges
+//   - [Force] / [ForceExpr] construct [Forcing[C]] and [ForcingExpr[C]] evidence with monotonicity checks
+//   - [Relation[C, A]] is indexed by world, [StepIndex], and value
+//   - [Later] implements the guarded later modality: index zero is trivial; index n+1 checks at n
+//   - [CheckRelation], [WeakenIndexedView], and [WeakenIndexedSuspension] check indexed evidence or weaken finite credit
+//   - [CheckCompletedRelation] checks the final finite-trace relation at a completed indexed frontier
 //
 // Nil-completion convention: cove forwards [kont]'s stepping classifier, so
 // [Step], [StepExpr], [StepWith], [StepExprWith], [SuspensionView.Resume], and

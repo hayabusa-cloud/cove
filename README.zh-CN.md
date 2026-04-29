@@ -39,17 +39,24 @@ go get code.hybscloud.com/cove
 
 ## 核心类型
 
-| 类型                                    | 用途                            |
-|---------------------------------------|-------------------------------|
-| `View[C, A]`                          | 余单子载体：环境上下文 C 下的值 A           |
-| `SuspensionView[C, A]`                | 与环境上下文配对的 kont 挂起             |
-| `Req[C]`                              | C 上的逆变谓词（闭包形式）：`func(C) bool` |
-| `ReqExpr[C]`                          | C 上的逆变谓词（去函数化形式）              |
-| `Rule[C]` / `RuleExpr[C]`             | 带诊断 `Report` 的命名谓词            |
-| `Checked[C, A]` / `CheckedExpr[C, A]` | 由需求门控的值                       |
-| `Guarded[C, A]` / `GuardedExpr[C, A]` | 由命名规则门控的值                     |
+| 类型                                                  | 用途                              |
+|-----------------------------------------------------|---------------------------------|
+| `View[C, A]`                                        | 余单子载体：环境上下文 C 下的值 A             |
+| `SuspensionView[C, A]`                              | 与环境上下文配对的 kont 挂起               |
+| `World`                                             | 环境上下文类型的 Kripke 读法              |
+| `StepIndex`                                         | 步进索引观测的有限近似层级                   |
+| `Preorder[C]`                                       | Kripke 世界扩展关系 `w <= w'`，带局部定律检查 |
+| `Transition[C]`                                     | 两个 Kripke 世界之间的具体候选边            |
+| `Forcing[C]` / `ForcingExpr[C]`                     | 带世界预序与单调性检查的需求                  |
+| `Relation[C, A]`                                    | 关于世界、索引和值的步进索引 Kripke 关系        |
+| `IndexedView[C, A]` / `IndexedSuspensionView[C, A]` | 带显式步进额度的上下文观测                   |
+| `Req[C]`                                            | C 上的逆变谓词（闭包形式）：`func(C) bool`   |
+| `ReqExpr[C]`                                        | C 上的逆变谓词（去函数化形式）                |
+| `Rule[C]` / `RuleExpr[C]`                           | 带诊断 `Report` 的命名谓词              |
+| `Checked[C, A]` / `CheckedExpr[C, A]`               | 由需求门控的值                         |
+| `Guarded[C, A]` / `GuardedExpr[C, A]`               | 由命名规则门控的值                       |
 
-`Ambient` 约束上下文类型参数 (C, D)。`Focus` 约束值类型参数 (A, B)。
+`Ambient` 约束上下文类型参数 (C, D)。`World` 为同一结构约束提供 Kripke 词汇，`Focus` 约束值类型参数 (A, B)。
 
 ## 上下文步进
 
@@ -118,6 +125,54 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` 和 `StepExpr` 重新导出 kont 的评估器，不绑定上下文。
+
+## 步进索引 Kripke 证据
+
+`cove` 可以显式表达 Kripke 结构而不引入调度策略。`Preorder[C]` 定义世界扩展，并提供 `Extends`、`ReflexiveAt`、`TransitiveAt`
+局部检查；`Transition[C]`、`CheckTransition`、`CheckForcingTransition` 与 `CheckInvariantTransition` 检查具体世界边；
+`Forcing` 将需求与该预序配对，`Relation` 按世界、有限 `StepIndex` 与值索引语义有效性。
+
+`DiscreteWorlds` 适用于只允许相等世界的场景，`TotalWorlds` 则给出任意两个世界都相关的预序。`ForceExpr` 是 `ReqExpr` 对应的
+`Force`；`CheckRelation`、`WeakenIndexedView` 与 `WeakenIndexedSuspension` 显式表达关系检查和步进额度弱化。
+
+```go
+type RuntimeWorld struct {
+    Epoch uint64
+}
+
+leq := func(w, next RuntimeWorld) bool {
+    return w.Epoch <= next.Epoch
+}
+_ = cove.Preorder[RuntimeWorld](leq).ReflexiveAt(RuntimeWorld{Epoch: 1})
+_ = cove.Preorder[RuntimeWorld](leq).TransitiveAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2}, RuntimeWorld{Epoch: 3})
+
+canObserve := cove.Force(leq, func(w RuntimeWorld) bool {
+    return w.Epoch > 0
+})
+_ = canObserve.MonotoneAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2})
+
+rel := cove.Relate(leq, func(w RuntimeWorld, n cove.StepIndex, value int) bool {
+    return uint64(n) <= w.Epoch && value >= 0
+})
+later := cove.Later(rel)
+_ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
+```
+
+对于操作前缀，`StepWithIndex` 和 `StepExprWithIndex` 会把 `SuspensionView` 与显式 fuel 配对。每次 indexed `Resume`
+都消耗一个步进额度，使有限观测可见地递减。需要把后继上下文检查为 Kripke 世界扩展时使用 `ResumeTo`；完成后的 indexed
+frontier 可用 `CheckCompletedRelation` 检查最终关系：
+
+```go
+_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+var val int
+for sv.Extract() != nil {
+    result := dispatch(sv.Ask(), sv.Op())
+    next := sv.Ask()
+    next.Epoch++
+    val, sv = sv.ResumeTo(leq, result, next)
+}
+_ = cove.CheckCompletedRelation(sv, val, rel)
+```
 
 ## 命令
 
@@ -253,13 +308,13 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 
 ## 生态系统定位
 
-| 包 | 职责 | 范畴性质 |
-|----|------|----------|
-| `kont` | 效应操作、处理器、挂起与恢复 | 代数 / 自由单子 / 折叠 |
-| **`cove`** | **跨挂起边界的环境上下文** | **余代数 / 余单子 / 展开** |
-| `takt` | 主动器分派、结果分类、事件循环 | 余模型（处理器对偶）|
-| `uring` | 内核 I/O：SQE/CQE、环管理、缓冲环 | — |
-| `iox` | 结果代数与错误语义 | — |
+| 包          | 职责                     | 范畴性质               |
+|------------|------------------------|--------------------|
+| `kont`     | 效应操作、处理器、挂起与恢复         | 代数 / 自由单子 / 折叠     |
+| **`cove`** | **跨挂起边界的环境上下文**        | **余代数 / 余单子 / 展开** |
+| `takt`     | 主动器分派、步进与运行器观测         | 余模型（处理器对偶）         |
+| `uring`    | 内核 I/O：SQE/CQE、环管理、缓冲环 | —                  |
+| `iox`      | 结果代数与错误语义              | —                  |
 
 ## 形式结构
 

@@ -39,17 +39,25 @@ Go 1.26+ が必要。
 
 ## コア型
 
-| 型                                     | 用途                               |
-|---------------------------------------|----------------------------------|
-| `View[C, A]`                          | 余モナドキャリア：環境コンテキスト C の下の値 A       |
-| `SuspensionView[C, A]`                | 環境コンテキストと対になった kont サスペンション      |
-| `Req[C]`                              | C 上の反変述語（クロージャ形式）：`func(C) bool` |
-| `ReqExpr[C]`                          | C 上の反変述語（脱関数化形式）                 |
-| `Rule[C]` / `RuleExpr[C]`             | 診断用 `Report` 付きの名前付き述語           |
-| `Checked[C, A]` / `CheckedExpr[C, A]` | 要件でゲートされた値                       |
-| `Guarded[C, A]` / `GuardedExpr[C, A]` | 名前付きルールでゲートされた値                  |
+| 型                                                   | 用途                                |
+|-----------------------------------------------------|-----------------------------------|
+| `View[C, A]`                                        | 余モナドキャリア：環境コンテキスト C の下の値 A        |
+| `SuspensionView[C, A]`                              | 環境コンテキストと対になった kont サスペンション       |
+| `World`                                             | 環境コンテキスト型の Kripke 的読み方            |
+| `StepIndex`                                         | ステップ添字観測のための有限近似レベル               |
+| `Preorder[C]`                                       | Kripke 世界拡張関係 `w <= w'` と局所的な法則検査 |
+| `Transition[C]`                                     | 2 つの Kripke 世界の具体的な候補エッジ          |
+| `Forcing[C]` / `ForcingExpr[C]`                     | 世界前順序と単調性チェックを持つ要件                |
+| `Relation[C, A]`                                    | 世界・添字・値に対するステップ添字 Kripke 関係       |
+| `IndexedView[C, A]` / `IndexedSuspensionView[C, A]` | 明示的なステップ credit を持つ文脈観測           |
+| `Req[C]`                                            | C 上の反変述語（クロージャ形式）：`func(C) bool`  |
+| `ReqExpr[C]`                                        | C 上の反変述語（脱関数化形式）                  |
+| `Rule[C]` / `RuleExpr[C]`                           | 診断用 `Report` 付きの名前付き述語            |
+| `Checked[C, A]` / `CheckedExpr[C, A]`               | 要件でゲートされた値                        |
+| `Guarded[C, A]` / `GuardedExpr[C, A]`               | 名前付きルールでゲートされた値                   |
 
-`Ambient` はコンテキスト型パラメータ (C, D) を制約する。`Focus` は値型パラメータ (A, B) を制約する。
+`Ambient` はコンテキスト型パラメータ (C, D) を制約する。`World` は同じ構造制約に Kripke 語彙を与え、`Focus`
+は値型パラメータ (A, B) を制約する。
 
 ## 文脈付きステッピング
 
@@ -120,6 +128,56 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` と `StepExpr` はコンテキスト束縛なしで kont の評価器を再エクスポートする。
+
+## ステップ添字 Kripke 証拠
+
+`cove` はスケジューラ方針を持ち込まずに Kripke 構造を明示できる。`Preorder[C]` は世界拡張を定義し、`Extends`、
+`ReflexiveAt`、`TransitiveAt` の局所検査を提供する。`Transition[C]`、`CheckTransition`、`CheckForcingTransition`、
+`CheckInvariantTransition` は具体的な世界エッジを検査する。`Forcing` は要件をその前順序と対にし、`Relation` は世界・有限
+`StepIndex`・値によって意味的妥当性を添字付ける。
+
+`DiscreteWorlds` は等しい世界だけを関連付ける場合に使い、`TotalWorlds` はすべての世界対を関連付ける前順序を与える。
+`ForceExpr` は `ReqExpr` 用の `Force` であり、`CheckRelation`、`WeakenIndexedView`、`WeakenIndexedSuspension` は関係検査とステップ
+credit の弱化を明示する。
+
+```go
+type RuntimeWorld struct {
+    Epoch uint64
+}
+
+leq := func(w, next RuntimeWorld) bool {
+    return w.Epoch <= next.Epoch
+}
+_ = cove.Preorder[RuntimeWorld](leq).ReflexiveAt(RuntimeWorld{Epoch: 1})
+_ = cove.Preorder[RuntimeWorld](leq).TransitiveAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2}, RuntimeWorld{Epoch: 3})
+
+canObserve := cove.Force(leq, func(w RuntimeWorld) bool {
+    return w.Epoch > 0
+})
+_ = canObserve.MonotoneAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2})
+
+rel := cove.Relate(leq, func(w RuntimeWorld, n cove.StepIndex, value int) bool {
+    return uint64(n) <= w.Epoch && value >= 0
+})
+later := cove.Later(rel)
+_ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
+```
+
+操作的な prefix では、`StepWithIndex` と `StepExprWithIndex` が `SuspensionView` を明示的な fuel と対にする。indexed
+`Resume` ごとに 1 ステップ分の credit を消費するため、有限観測が可視的に減少する。後続コンテキストを Kripke 世界拡張として検査する場合は
+`ResumeTo` を使い、完了済み indexed frontier の最終関係は `CheckCompletedRelation` で検査する：
+
+```go
+_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+var val int
+for sv.Extract() != nil {
+    result := dispatch(sv.Ask(), sv.Op())
+    next := sv.Ask()
+    next.Epoch++
+    val, sv = sv.ResumeTo(leq, result, next)
+}
+_ = cove.CheckCompletedRelation(sv, val, rel)
+```
 
 ## コマンド
 
@@ -257,13 +315,13 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 
 ## エコシステムにおける位置
 
-| パッケージ | 担当領域 | 圏論的側面 |
-|------------|----------|------------|
-| `kont` | エフェクト操作、ハンドラ、サスペンションと再開 | 代数 / 自由モナド / 畳み込み |
-| **`cove`** | **サスペンション境界をまたぐ環境コンテキスト** | **余代数 / 余モナド / 展開** |
-| `takt` | プロアクターディスパッチ、アウトカム分類、イベントループ | 余モデル（ハンドラの双対）|
-| `uring` | カーネル I/O：SQE/CQE、リング管理、バッファリング | — |
-| `iox` | アウトカム代数とエラーセマンティクス | — |
+| パッケージ      | 担当領域                           | 圏論的側面               |
+|------------|--------------------------------|---------------------|
+| `kont`     | エフェクト操作、ハンドラ、サスペンションと再開        | 代数 / 自由モナド / 畳み込み   |
+| **`cove`** | **サスペンション境界をまたぐ環境コンテキスト**      | **余代数 / 余モナド / 展開** |
+| `takt`     | プロアクターディスパッチ、ステップ実行とランナー観測     | 余モデル（ハンドラの双対）       |
+| `uring`    | カーネル I/O：SQE/CQE、リング管理、バッファリング | —                   |
+| `iox`      | アウトカム代数とエラーセマンティクス             | —                   |
 
 ## 形式的構造
 
