@@ -35,6 +35,39 @@ func TestViewExtendExtractIdentity(t *testing.T) {
 	}
 }
 
+func TestViewExtendAssociativity(t *testing.T) {
+	v := cove.Observe(3, 7)
+	f := func(w cove.View[int, int]) int {
+		return w.Extract() + w.Ask()
+	}
+	g := func(w cove.View[int, int]) int {
+		return w.Extract() * w.Ask()
+	}
+
+	left := cove.Extend(cove.Extend(v, f), g)
+	right := cove.Extend(v, func(w cove.View[int, int]) int {
+		return g(cove.Extend(w, f))
+	})
+	if left != right {
+		t.Fatalf("extend associativity: got %#v want %#v", left, right)
+	}
+}
+
+func TestViewDuplicateExtendCoherence(t *testing.T) {
+	v := cove.Observe(3, 7)
+	f := func(w cove.View[int, int]) int {
+		return w.Extract() + w.Ask()
+	}
+
+	left := cove.Duplicate(cove.Extend(v, f))
+	right := cove.Extend(v, func(w cove.View[int, int]) cove.View[int, int] {
+		return cove.Extend(w, f)
+	})
+	if left != right {
+		t.Fatalf("duplicate/extend coherence: got %#v want %#v", left, right)
+	}
+}
+
 func TestCmdComposeUsesContextualExtension(t *testing.T) {
 	v := cove.Observe(3, 7)
 	f := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
@@ -46,6 +79,25 @@ func TestCmdComposeUsesContextualExtension(t *testing.T) {
 
 	if got, want := cove.Run(v, cove.Compose(g, f)), g(cove.Extend(v, f)); got != want {
 		t.Fatalf("compose: got %v want %v", got, want)
+	}
+}
+
+func TestCmdComposeAssociativity(t *testing.T) {
+	v := cove.Observe(3, 7)
+	f := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
+		return w.Extract() + w.Ask()
+	})
+	g := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
+		return w.Extract() * w.Ask()
+	})
+	h := cove.Cmd[int, int, int](func(w cove.View[int, int]) int {
+		return w.Extract() - w.Ask()
+	})
+
+	left := cove.Run(v, cove.Compose(h, cove.Compose(g, f)))
+	right := cove.Run(v, cove.Compose(cove.Compose(h, g), f))
+	if left != right {
+		t.Fatalf("compose associativity: got %v want %v", left, right)
 	}
 }
 
