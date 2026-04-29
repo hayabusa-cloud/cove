@@ -148,22 +148,22 @@ relation checks and step-credit weakening explicit.
 
 ```go
 type RuntimeWorld struct {
-Epoch uint64
+	Epoch uint64
 }
 
-leq := func (w, next RuntimeWorld) bool {
-return w.Epoch <= next.Epoch
+leq := func(w, next RuntimeWorld) bool {
+	return w.Epoch <= next.Epoch
 }
 _ = cove.Preorder[RuntimeWorld](leq).ReflexiveAt(RuntimeWorld{Epoch: 1})
 _ = cove.Preorder[RuntimeWorld](leq).TransitiveAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2}, RuntimeWorld{Epoch: 3})
 
-canObserve := cove.Force(leq, func (w RuntimeWorld) bool {
-return w.Epoch > 0
+canObserve := cove.Force(leq, func(w RuntimeWorld) bool {
+	return w.Epoch > 0
 })
 _ = canObserve.MonotoneAt(RuntimeWorld{Epoch: 1}, RuntimeWorld{Epoch: 2})
 
-rel := cove.Relate(leq, func (w RuntimeWorld, n cove.StepIndex, value int) bool {
-return uint64(n) <= w.Epoch && value >= 0
+rel := cove.Relate(leq, func(w RuntimeWorld, n cove.StepIndex, value int) bool {
+	return uint64(n) <= w.Epoch && value >= 0
 })
 later := cove.Later(rel)
 _ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
@@ -178,10 +178,10 @@ completed indexed frontier:
 _, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
 var val int
 for sv.Extract() != nil {
-result := dispatch(sv.Ask(), sv.Op())
-next := sv.Ask()
-next.Epoch++
-val, sv = sv.ResumeTo(leq, result, next)
+	result := dispatch(sv.Ask(), sv.Op())
+	next := sv.Ask()
+	next.Epoch++
+	val, sv = sv.ResumeTo(leq, result, next)
 }
 _ = cove.CheckCompletedRelation(sv, val, rel)
 ```
@@ -194,10 +194,10 @@ the identity command; `LiftCmd` lifts a focus-only map into the contextual world
 
 ```go
 cmd := cove.Compose(
-func (v cove.View[Runtime, int]) string {
-return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
-},
-cove.LiftCmd(func (n int) int { return n + 1 }),
+	func(v cove.View[Runtime, int]) string {
+		return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
+	},
+	cove.LiftCmd(func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
