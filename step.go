@@ -28,6 +28,9 @@ func ObserveSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A]) Susp
 }
 
 // CheckSuspension returns a suspension view when req holds.
+// Refusal returns a zero view without consuming susp; retain the original handle.
+// The caller supplies current context and protects the checked condition through
+// the action it authorizes. This check neither dispatches nor validates a result.
 func CheckSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req Req[C]) (SuspensionView[C, A], bool) {
 	if !Need(ctx, req) {
 		var zero SuspensionView[C, A]
@@ -37,7 +40,7 @@ func CheckSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req Re
 }
 
 // CheckSuspensionExpr returns a suspension view when req holds in expression
-// form.
+// form. Refusal leaves susp unconsumed, as with [CheckSuspension].
 func CheckSuspensionExpr[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req ReqExpr[C]) (SuspensionView[C, A], bool) {
 	if !NeedExpr(ctx, req) {
 		var zero SuspensionView[C, A]
@@ -94,18 +97,16 @@ func (v SuspensionView[C, A]) Resume(value Resumed) (A, SuspensionView[C, A]) {
 // It panics after completion.
 // A nil mapper keeps the current context, so ResumeWith strictly generalizes
 // [Resume].
+// The mapper runs after the continuation advances, including on completion.
+// Refresh context and check any pre-resume requirement before calling ResumeWith;
+// advance only the returned successor. Resumption does not settle external I/O.
 func (v SuspensionView[C, A]) ResumeWith(value Resumed, f func(C) C) (A, SuspensionView[C, A]) {
 	result, next := v.pending().Resume(value)
-	if next == nil {
-		if f == nil {
-			return result, SuspensionView[C, A]{Ctx: v.Ctx}
-		}
-		return result, SuspensionView[C, A]{Ctx: f(v.Ctx)}
+	if f != nil {
+		v.Ctx = f(v.Ctx)
 	}
-	if f == nil {
-		return result, SuspensionView[C, A]{Ctx: v.Ctx, Suspension: next}
-	}
-	return result, SuspensionView[C, A]{Ctx: f(v.Ctx), Suspension: next}
+	v.Suspension = next
+	return result, v
 }
 
 // Discard consumes the suspension without resuming it.
@@ -135,8 +136,7 @@ func StepExpr[A Focus](m kont.Expr[A]) (A, *kont.Suspension[A]) {
 // StepWith runs a Cont computation and pairs its first suspension with ctx.
 // It is the primary contextual stepping entry point. Completion is observed
 // when the returned [SuspensionView.Suspension] is nil; in that case, the
-// result A follows kont's nil-completion convention (nilable types cannot
-// use nil as a meaningful completed payload without an explicit witness).
+// result A is the completed value, which may itself be nil.
 func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, SuspensionView[C, A]) {
 	result, susp := kont.Step(m)
 	return result, ObserveSuspension(ctx, susp)
@@ -145,9 +145,8 @@ func StepWith[C Ambient, A Focus](ctx C, m kont.Cont[Resumed, A]) (A, Suspension
 // StepExprWith runs an Expr computation and pairs its first suspension with ctx.
 // It is the primary contextual stepping entry point for callers already in Expr
 // form. Completion is observed when the returned [SuspensionView.Suspension]
-// is nil; in that case, the result A follows kont's nil-completion convention
-// (nilable types cannot use nil as a meaningful completed payload without an
-// explicit witness).
+// is nil; in that case, the result A is the completed value, which may itself
+// be nil.
 func StepExprWith[C Ambient, A Focus](ctx C, m kont.Expr[A]) (A, SuspensionView[C, A]) {
 	result, susp := kont.StepExpr(m)
 	return result, ObserveSuspension(ctx, susp)

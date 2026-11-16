@@ -182,6 +182,7 @@ func TestMapContextSuspension(t *testing.T) {
 	if mapped.Ask() != "ctx" {
 		t.Fatalf("unexpected mapped ctx: %v", mapped.Ask())
 	}
+	mapped.Discard()
 }
 
 func TestWithContextSuspension(t *testing.T) {
@@ -196,6 +197,7 @@ func TestWithContextSuspension(t *testing.T) {
 	if replaced.Ask() != "new" {
 		t.Fatalf("unexpected ctx: %v", replaced.Ask())
 	}
+	replaced.Discard()
 }
 
 func TestCompletedSuspensionViewOpPanics(t *testing.T) {
