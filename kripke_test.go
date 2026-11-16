@@ -5,6 +5,7 @@
 package cove_test
 
 import (
+	"slices"
 	"testing"
 
 	"code.hybscloud.com/cove"
@@ -100,6 +101,50 @@ func TestTransitionHelpers(t *testing.T) {
 	}
 	if cove.CheckInvariantTransition(leq, req, bad) {
 		t.Fatal("invariant transition must reject non-successor worlds")
+	}
+}
+
+func TestForcingTransitionEvaluationOrder(t *testing.T) {
+	for bits := range 8 {
+		var calls []string
+		edge, before, after := bits&1 != 0, bits&2 != 0, bits&4 != 0
+		leq := cove.Preorder[int](func(int, int) bool {
+			calls = append(calls, "edge")
+			return edge
+		})
+		forcing := cove.Force(leq, func(world int) bool {
+			if world == 0 {
+				calls = append(calls, "before")
+				return before
+			}
+			calls = append(calls, "after")
+			return after
+		})
+		got := cove.CheckForcingTransition(forcing, cove.Transition[int]{Before: 0, After: 1})
+		wantCalls := []string{"edge"}
+		if edge {
+			wantCalls = append(wantCalls, "before")
+			if before {
+				wantCalls = append(wantCalls, "after")
+			}
+		}
+		if got != (edge && before && after) || !slices.Equal(calls, wantCalls) {
+			t.Fatalf("case %d: result=%v calls=%v, want %v", bits, got, calls, wantCalls)
+		}
+	}
+}
+
+func TestForcingTransitionNilRequirement(t *testing.T) {
+	for _, edge := range []bool{false, true} {
+		calls := 0
+		forcing := cove.Force[int](func(int, int) bool {
+			calls++
+			return edge
+		}, nil)
+		got := cove.CheckForcingTransition(forcing, cove.Transition[int]{Before: 1, After: 2})
+		if got != edge || calls != 1 {
+			t.Fatalf("nil requirement: got %v after %d edge calls, want %v after one call", got, calls, edge)
+		}
 	}
 }
 

@@ -7,7 +7,7 @@ package cove
 import "code.hybscloud.com/kont"
 
 // StepIndex is the finite approximation level used by step-indexed
-// contextual interpretations.
+// contextual interpretations. It is logical credit, not elapsed time or progress.
 type StepIndex = kont.StepIndex
 
 // Preorder is the Kripke world-extension relation on ambient contexts.
@@ -108,11 +108,18 @@ func (f Forcing[C]) MonotoneAt(w, wNext C) bool {
 
 // CheckForcingTransition checks that a concrete transition extends the world
 // and preserves f at both endpoints.
+// The callbacks must return stable answers for the supplied worlds.
+// It checks the edge, then the before and after predicates, each at most once,
+// stopping at the first false result.
 func CheckForcingTransition[C World](f Forcing[C], t Transition[C]) bool {
-	return CheckTransition(f.Preorder(), t) &&
-		f.Holds(t.Before) &&
-		f.MonotoneAt(t.Before, t.After) &&
-		f.Holds(t.After)
+	leq := f.Preorder()
+	if !leq(t.Before, t.After) {
+		return false
+	}
+	if f.req == nil {
+		return true
+	}
+	return f.req(t.Before) && f.req(t.After)
 }
 
 // CheckInvariantTransition checks that req holds across a concrete transition
@@ -203,7 +210,7 @@ func (r Relation[C, A]) WeakensAt(world C, strong, weak StepIndex, value A) bool
 	return r.Holds(world, weak, value)
 }
 
-// Later delays r by one physical step.
+// Later shifts r by one step-index level.
 //
 // At index zero, Later is guarded and holds trivially. At n+1, it checks r at n.
 func Later[C World, A Focus](r Relation[C, A]) Relation[C, A] {
@@ -299,6 +306,9 @@ func (v IndexedSuspensionView[C, A]) ResumeWith(value Resumed, f func(C) C) (A, 
 // the caller proves monotonicity externally. It panics if the suspension has
 // completed, if the step index is zero, or if nextWorld does not extend the
 // current world under leq.
+// The caller supplies nextWorld; ResumeTo neither obtains fresh observations nor
+// checks an arbitrary requirement. The supplied preorder and forcing predicates
+// need their own global laws; checking a concrete edge does not prove them.
 func (v IndexedSuspensionView[C, A]) ResumeTo(leq Preorder[C], value Resumed, nextWorld C) (A, IndexedSuspensionView[C, A]) {
 	_ = v.View.pending()
 	if !leq.Extends(v.Ask(), nextWorld) {
