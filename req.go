@@ -31,6 +31,8 @@ func Pullback[C, D Ambient](req Req[D], f func(C) D) Req[C] {
 }
 
 // All returns the conjunction of reqs.
+// It evaluates left to right, stopping at the first false requirement.
+// With multiple operands, it retains reqs; keep that slice unchanged while used.
 func All[C Ambient](reqs ...Req[C]) Req[C] {
 	switch len(reqs) {
 	case 0:
@@ -49,6 +51,8 @@ func All[C Ambient](reqs ...Req[C]) Req[C] {
 }
 
 // Any returns the disjunction of reqs.
+// It evaluates left to right, stopping at the first true requirement.
+// With multiple operands, it retains reqs; keep that slice unchanged while used.
 func Any[C Ambient](reqs ...Req[C]) Req[C] {
 	switch len(reqs) {
 	case 0:

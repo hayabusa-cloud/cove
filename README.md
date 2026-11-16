@@ -1,5 +1,5 @@
 [![Go Reference](https://pkg.go.dev/badge/code.hybscloud.com/cove.svg)](https://pkg.go.dev/code.hybscloud.com/cove)
-[![Go Report Card](https://goreportcard.com/badge/github.com/hayabusa-cloud/cove)](https://goreportcard.com/report/github.com/hayabusa-cloud/cove)
+[![Benchmarks](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml)
 [![Coverage Status](https://codecov.io/gh/hayabusa-cloud/cove/graph/badge.svg)](https://codecov.io/gh/hayabusa-cloud/cove)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -100,12 +100,7 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` still returns the carried context.
 
-cove forwards kont's stepping classifier, so `Step`, `StepExpr`, `StepWith`, `StepExprWith`, `Resume`, and `ResumeWith`
-inherit kont's nil-completion convention: completion is observed by a nil suspension result, and on completion the
-returned value is the zero value of `A`. Suspended steps may also return the zero value of `A`, so callers must use the
-suspension result—not `A` itself—to distinguish completion from suspension. Computations whose result type is a nilable
-type (pointer, interface, map, slice, channel, or function) therefore cannot use nil as a meaningful completed value;
-wrap nil in an explicit sum or witness type when that distinction matters. Carrier context is unaffected.
+cove forwards kont's stepping classifier: a nil suspension identifies completion, and the returned value is the completed result. Nil is a valid result for a nilable type; an interface containing a typed nil retains its dynamic type. Suspended steps may also return the zero value of `A`, so inspect the suspension to distinguish completion. Carrier context is preserved.
 
 `ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without performing any requirement check.
 `CheckSuspension` and `CheckSuspensionExpr` provide gated forms:
@@ -134,6 +129,14 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` and `StepExpr` re-export kont's evaluators without context binding.
+
+A refused check leaves the original suspension unconsumed; retain that handle until a later check or explicit `Discard`.
+Refresh context from its owner before checking, and protect the condition through the action it authorizes, including
+callback reentry. `ResumeWith` runs its mapper after advancement, including completion. `ResumeTo` checks a supplied
+world edge; it neither obtains fresh observations nor checks an arbitrary requirement. Revocable eligibility is not
+persistent forcing, and `StepIndex` is logical credit, not time. Dispatch, continuation advancement and external resource
+retirement have separate contracts; `Discard` does not settle I/O. The [temporal example](temporal_example_test.go)
+demonstrates refusal, refresh and completion using a pure operation without external resources.
 
 ## Step-Indexed Kripke Evidence
 
@@ -299,7 +302,7 @@ Expr-form equivalents: `GuardExpr`, `GuardRuleExpr`, `CheckedExpr`, `GuardedExpr
 
 ## View Operations
 
-`View[C, A]` is a comonad over the category of Go types. The carrier is the product C × A; `Extract` (ε) projects the value; `Duplicate` (δ) embeds the observation as the focused value:
+For fixed C and pure callbacks, `View[C, A]` has the environment-comonad structure described below. The carrier is the product C × A; `Extract` (ε) projects the value; `Duplicate` (δ) embeds the observation as the focused value:
 
 ```go
 v := cove.Observe(ctx, value)
@@ -337,22 +340,15 @@ preserving the ambient context. The induced command composition with `g: W(C, B)
 
 ## Formal Structure
 
-`View[C, A]` is an environment comonad (Uustalu & Vene 2008) with carrier C × A, counit ε = π₂ (Extract), and
-comultiplication δ(c, a) = (c, (c, a)) (Duplicate). `Extend` implements contextual extension (coKleisli extension in the
-categorical literature).
+For fixed C and pure, total callbacks, `View[C, A]` is an environment comonad (Uustalu & Vene 2008): carrier C × A, counit ε = π₂ (`Extract`), and comultiplication δ(c, a) = (c, (c, a)) (`Duplicate`). `Extend` implements coKleisli extension. The equations use observational equality and stable context; they do not require Go-comparable values or functions.
 
-`Req[C]` and `ReqExpr[C]` are objects in the Boolean algebra of predicates over C. `Pullback` implements the contravariant functor f* induced by a morphism f: C → D, mapping predicates on D to predicates on C. `ExprPullback` preserves the Boolean algebra structure: f*(p ∧ q) = f*(p) ∧ f*(q), f*(¬p) = ¬f*(p).
+`Req[C]` denotes a predicate; `ReqExpr[C]` stores Boolean syntax with opaque function atoms. For pure predicates and projections, `Pullback` implements the contravariant map f* induced by f: C → D. `ExprPullback` preserves the Boolean structure: f*(p ∧ q) = f*(p) ∧ f*(q), f*(¬p) = ¬f*(p). It may apply the projection to each visited atom.
 
-kont models algebraic effects (free monad, handlers, fold); cove models coeffects (comonad, requirements, unfold). The
-two are categorical duals at the suspension boundary: kont describes what the computation does to the world, whereas
-cove states what the computation needs from the world.
+kont supplies effectful computations and resumptions; cove carries the context required to observe and check their boundaries. The caller acquires facts, supplies synchronization, and owns execution and resource lifetimes.
 
-Read through the lens of modal effects, the carrier shape can be read as naming what happens to ambient context: kont (
-C → D) replaces it, cove (W(C, A) → B) handles it relatively, and pure pass-through preserves it. Effect structure rides
-on the carrier, not on a function colour, which keeps cove policy-free.
+Composite requirements evaluate left to right with short circuiting. `All`, `Any`, `ExprAll`, and `ExprAny` retain multiple operands supplied as a slice; keep that storage unchanged while used. View copies share referenced storage. `ExprAtom` and `ReifyReq` require non-nil predicates.
 
-`ReqExpr` defunctionalizes the Boolean algebra into a tagged union, namely the initial algebra of the Boolean signature
-functor, so that the structure of a requirement is inspectable data rather than an opaque closure (Reynolds 1972).
+`ReqExpr` represents Boolean composition as data while leaf predicates remain Go functions. Evaluation interprets that structure. `ReifyReq` wraps an opaque predicate as an atom; it does not extract syntax from a closure or specialize execution automatically.
 
 ## Practical Recipes
 
@@ -370,17 +366,20 @@ req := cove.All(
 // 2. Gate a value on that requirement. This produces a Checked[Caps, T].
 checked := cove.Guard(req, payload)
 
-// 3. Reify into an Expr to step under different ambient contexts.
-expr := cove.ReifyReq(req)
-ok := cove.NeedExpr(Caps{CanSubmit: true, HasToken: true}, expr)
-_ = checked
-_ = ok
+// 3. Check the requirement under a concrete context before using the value.
+if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
+	_ = view.Extract()
+}
 ```
 
 `Pullback` lets a caller adapt a requirement defined over one context so that it works over another (`Pullback(req, f)`
 for `f: D → C`); `MapChecked` and `MapGuarded` transport gated values through value-level transformations without
 re-checking the predicate. The combination `All` + `Pullback` + `Guard` is how downstream packages build typed
 capability checks without coupling to a single context type.
+
+## Performance Measurement
+
+See the [benchmark guide](BENCHMARKS.md) for comparable workloads, measurement commands, and allocation boundaries in your environment.
 
 ## References
 

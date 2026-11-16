@@ -12,11 +12,10 @@
 // so it stays explicit across asynchronous boundaries instead of travelling
 // through hidden globals or ad-hoc side maps.
 //
-// Read through the lens of modal effects, the carrier shape can be read as
-// naming what happens to ambient context: kont (C → D) replaces it, cove
-// (W(C, A) → B) handles it relatively, and pure pass-through preserves it.
-// Effect structure rides on the carrier, not on a function colour, which keeps
-// cove policy-free.
+// Context is passed explicitly. View operations copy their fields; they do not
+// clone referenced storage or grant additional suspension ownership. Callers
+// keep shared context and requirement operands stable during evaluation and
+// provide any needed concurrency control.
 //
 // Responsibilities stay split by layer:
 //
@@ -35,17 +34,17 @@
 //
 // Carriers:
 //
-//   - [View[C, A]], a focused value paired with ambient context
-//   - [Cmd[C, A, B]], a contextual command over [View]
-//   - [SuspensionView[C, A]], a [kont.Suspension] paired with ambient context
-//   - [World], [StepIndex], [Preorder[C]], [Transition[C]], [Forcing[C]],
-//     [ForcingExpr[C]], [Indexed[C, A]], and [Relation[C, A]], step-indexed Kripke evidence over ambient worlds
-//   - [IndexedView[C, A]] and [IndexedSuspensionView[C, A]], contextual
+//   - [View], a focused value paired with ambient context
+//   - [Cmd], a contextual command over [View]
+//   - [SuspensionView], a [kont.Suspension] paired with ambient context
+//   - [World], [StepIndex], [Preorder], [Transition], [Forcing],
+//     [ForcingExpr], [Indexed], and [Relation], step-indexed Kripke evidence over ambient worlds
+//   - [IndexedView] and [IndexedSuspensionView], contextual
 //     observations paired with explicit finite step credit
-//   - [Req[C]] / [ReqExpr[C]], context predicates in closure and data forms
-//   - [Rule[C]] / [RuleExpr[C]] with [Report], named predicates for diagnostics
-//   - [Checked[C, A]] / [CheckedExpr[C, A]], requirement-gated values
-//   - [Guarded[C, A]] / [GuardedExpr[C, A]], rule-gated values
+//   - [Req] / [ReqExpr], context predicates in closure and data forms
+//   - [Rule] / [RuleExpr] with [Report], named predicates for diagnostics
+//   - [Checked] / [CheckedExpr], requirement-gated values
+//   - [Guarded] / [GuardedExpr], rule-gated values
 //
 // Commands:
 //
@@ -68,37 +67,46 @@
 // Kripke structure:
 //
 //   - [World] names the Kripke reading of ambient context
-//   - [Preorder[C]] names world extension, w <= w'
+//   - [Preorder] names world extension, w <= w'
 //   - [DiscreteWorlds] and [TotalWorlds] provide equality-only and total preorders
 //   - [Extends] is the package-level world-extension helper
 //   - [Preorder.Extends], [Preorder.ReflexiveAt], and [Preorder.TransitiveAt] expose concrete preorder law checks
-//   - [Transition[C]], [CheckTransition], [CheckForcingTransition], and [CheckInvariantTransition] check concrete world edges
-//   - [Force] / [ForceExpr] construct [Forcing[C]] and [ForcingExpr[C]] evidence with monotonicity checks
-//   - [Relation[C, A]] is indexed by world, [StepIndex], and value
+//   - [Transition], [CheckTransition], [CheckForcingTransition], and [CheckInvariantTransition] check concrete world edges
+//   - [Force] / [ForceExpr] construct [Forcing] and [ForcingExpr] evidence with monotonicity checks
+//   - [Relation] is indexed by world, [StepIndex], and value
 //   - [Later] implements the guarded later modality: index zero is trivial; index n+1 checks at n
 //   - [CheckRelation], [WeakenIndexedView], and [WeakenIndexedSuspension] check indexed evidence or weaken finite credit
 //   - [CheckCompletedRelation] checks the final finite-trace relation at a completed indexed frontier
 //
-// Nil-completion convention: cove forwards [kont]'s stepping classifier, so
-// [Step], [StepExpr], [StepWith], [StepExprWith], [SuspensionView.Resume], and
-// [SuspensionView.ResumeWith] report completion by yielding no further
-// suspension frontier (a nil *[kont.Suspension], or a [SuspensionView] whose
-// [SuspensionView.Suspension] field is nil). The completed payload returned
-// in that case is the zero value of A. Suspended steps may also return the
-// zero value of A, so callers must use the suspension/frontier result—not A
-// itself, and for [SuspensionView] specifically its
-// [SuspensionView.Suspension] field—to detect completion.
-// Computations whose result type A is a nilable type (pointer, interface, map, slice,
-// channel, or function) therefore cannot use nil as a meaningful completed
-// value; wrap nil in an explicit sum or witness type when that distinction
-// matters. Carrier context is unaffected: [SuspensionView.Ask] still returns
-// the ambient context after completion.
+// [Step] and [StepExpr] report completion with a nil *[kont.Suspension].
+// [StepWith], [StepExprWith], [SuspensionView.Resume], and
+// [SuspensionView.ResumeWith] report completion with a nil
+// [SuspensionView.Suspension] field. Use that field to detect completion;
+// pending steps may also return the zero value of A. The completed value follows
+// kont's classifier: a nil payload becomes the zero value of A, and a typed nil
+// inside an interface retains its dynamic type. Nil is a valid completed value
+// for a nilable result type. [SuspensionView.Ask] preserves the carried context
+// after completion.
+//
+// A refused requirement check leaves the original suspension unconsumed. Keep
+// that handle, refresh context from its owner, and check before the action being
+// authorized. The owner must protect the interval between check and action.
+// ResumeWith maps context after advancement; its mapper is not a pre-resume
+// guard. ResumeTo checks a supplied world edge without acquiring fresh context.
+// Revocable eligibility is not persistent forcing, and StepIndex is not a clock.
+// Discard consumes continuation control; external requests and resource loans
+// retain their independent completion and release obligations.
 //
 // Bridge helpers:
 //
-//   - [Step], [StepExpr], [Reify], [Reflect], [ReifyReq], and [ReflectReq] remain available as convenience wrappers around kont
+//   - [Step], [StepExpr], [Reify], and [Reflect] wrap kont's computation forms without binding context
+//   - [ReifyReq] and [ReflectReq] bridge cove's closure and expression requirements
 //
-// Laws:
+// Laws below assume pure, total callbacks and stable context. Equality is
+// observational; it does not require values or functions to be Go-comparable.
+// ExprPullback may apply its context projection to each visited atom. Bind
+// composite requirements before the evaluation path when their construction
+// cost should be excluded from that path.
 //
 //   - [Duplicate](v).Extract() == v
 //   - [Extend](v, func(w View[C, A]) A { return w.Extract() }) == v

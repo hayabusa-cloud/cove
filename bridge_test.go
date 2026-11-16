@@ -5,9 +5,10 @@
 package cove_test
 
 import (
+	"testing"
+
 	"code.hybscloud.com/cove"
 	"code.hybscloud.com/kont"
-	"testing"
 )
 
 func TestSteppingBridge(t *testing.T) {
@@ -17,6 +18,8 @@ func TestSteppingBridge(t *testing.T) {
 
 	if _, susp := cove.Step(cont); susp == nil {
 		t.Fatal("expected cont-world suspension")
+	} else {
+		susp.Discard()
 	}
 
 	expr := cove.Reify(cont)
@@ -30,7 +33,15 @@ func TestSteppingBridge(t *testing.T) {
 	if _, ok := step.Op().(ping); !ok {
 		t.Fatalf("unexpected step op type: %#v", step.Op())
 	}
-	result, next := step.Resume(41)
+	guarded := cove.Guard(func(v int) bool { return v > 0 }, step.Extract())
+	if !guarded.Check(1) {
+		t.Fatal("expected guarded suspension success")
+	}
+	checked, ok := cove.CheckSuspension(1, step.Extract(), func(v int) bool { return v > 0 })
+	if !ok || checked.Op() == nil {
+		t.Fatalf("unexpected checked suspension: %#v %v", checked, ok)
+	}
+	result, next := checked.Resume(41)
 	if next.Suspension != nil {
 		t.Fatalf("expected final completion, got next=%#v", next)
 	}
@@ -43,15 +54,8 @@ func TestSteppingBridge(t *testing.T) {
 		t.Fatal("expected reflected cont-world suspension")
 	} else if _, ok := susp.Op().(ping); !ok {
 		t.Fatalf("unexpected reflected op type: %#v", susp.Op())
-	}
-
-	guarded := cove.Guard(func(v int) bool { return v > 0 }, step.Extract())
-	if !guarded.Check(1) {
-		t.Fatal("expected guarded suspension success")
-	}
-	checked, ok := cove.CheckSuspension(1, step.Extract(), func(v int) bool { return v > 0 })
-	if !ok || checked.Op() == nil {
-		t.Fatalf("unexpected checked suspension: %#v %v", checked, ok)
+	} else {
+		susp.Discard()
 	}
 }
 

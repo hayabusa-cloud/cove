@@ -60,6 +60,7 @@ func ExprFalse[C Ambient]() ReqExpr[C] {
 }
 
 // ExprAtom wraps a leaf predicate as a requirement expression.
+// fn must be non-nil.
 func ExprAtom[C Ambient](fn func(C) bool) ReqExpr[C] {
 	return ReqExpr[C]{kind: reqAtom, fn: fn}
 }
@@ -70,6 +71,8 @@ func ExprNot[C Ambient](inner ReqExpr[C]) ReqExpr[C] {
 }
 
 // ExprAll returns the conjunction of reqs.
+// It evaluates left to right, stopping at the first false requirement.
+// With multiple operands, it retains reqs; keep that slice unchanged while used.
 func ExprAll[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	switch len(reqs) {
 	case 0:
@@ -82,6 +85,8 @@ func ExprAll[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 }
 
 // ExprAny returns the disjunction of reqs.
+// It evaluates left to right, stopping at the first true requirement.
+// With multiple operands, it retains reqs; keep that slice unchanged while used.
 func ExprAny[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	switch len(reqs) {
 	case 0:
@@ -95,6 +100,7 @@ func ExprAny[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 
 // ExprPullback transports req along a context projection and preserves its
 // explicit Boolean structure.
+// The projection must be pure; evaluation may call it for each visited atom.
 func ExprPullback[C, D Ambient](req ReqExpr[D], f func(C) D) ReqExpr[C] {
 	switch req.kind {
 	case reqFalse:

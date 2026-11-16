@@ -1,8 +1,8 @@
 .PHONY: check test bench
 
 check:
-	gofmt -l . | grep . && exit 1 || true
-	go mod tidy
+	@files="$$(gofmt -l .)" && test -z "$$files" || { printf '%s\n' "$$files"; exit 1; }
+	go mod tidy -diff
 	go vet ./...
 
 test:

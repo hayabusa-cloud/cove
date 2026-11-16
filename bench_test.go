@@ -12,17 +12,24 @@ import (
 )
 
 var boolSink bool
+var intSink int
+var viewSink cove.View[int, int]
+
+var requirementInputs = [...]int{-1, 0, 1, 2, 50, 99, 100, 101}
 
 func BenchmarkObserve(b *testing.B) {
-	for range b.N {
-		_ = cove.Observe(1, 2)
+	b.ReportAllocs()
+	for i := range b.N {
+		viewSink = cove.Observe(i, i+1)
 	}
 }
 
 func BenchmarkNeed(b *testing.B) {
 	req := cove.Req[int](func(v int) bool { return v > 0 })
-	for range b.N {
-		boolSink = cove.Need(1, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.Need(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -31,8 +38,10 @@ func BenchmarkNeedAll2(b *testing.B) {
 		func(v int) bool { return v > 0 },
 		func(v int) bool { return v%2 == 0 },
 	)
-	for range b.N {
-		boolSink = cove.Need(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.Need(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -42,15 +51,19 @@ func BenchmarkNeedAll3(b *testing.B) {
 		func(v int) bool { return v%2 == 0 },
 		func(v int) bool { return v < 100 },
 	)
-	for range b.N {
-		boolSink = cove.Need(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.Need(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
 func BenchmarkNeedExprAtom(b *testing.B) {
 	req := cove.ExprAtom(func(v int) bool { return v > 0 })
-	for range b.N {
-		boolSink = cove.NeedExpr(1, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.NeedExpr(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -59,8 +72,10 @@ func BenchmarkNeedExprAll2(b *testing.B) {
 		cove.ExprAtom(func(v int) bool { return v > 0 }),
 		cove.ExprAtom(func(v int) bool { return v%2 == 0 }),
 	)
-	for range b.N {
-		boolSink = cove.NeedExpr(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.NeedExpr(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -70,8 +85,10 @@ func BenchmarkNeedExprAll3(b *testing.B) {
 		cove.ExprAtom(func(v int) bool { return v%2 == 0 }),
 		cove.ExprAtom(func(v int) bool { return v < 100 }),
 	)
-	for range b.N {
-		boolSink = cove.NeedExpr(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.NeedExpr(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -80,15 +97,19 @@ func BenchmarkReflectReqEval(b *testing.B) {
 		cove.ExprAtom(func(v int) bool { return v > 0 }),
 		cove.ExprAtom(func(v int) bool { return v%2 == 0 }),
 	))
-	for range b.N {
-		boolSink = cove.Need(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.Need(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
 func BenchmarkReifyReqEval(b *testing.B) {
 	req := cove.ReifyReq(cove.Req[int](func(v int) bool { return v > 0 && v%2 == 0 }))
-	for range b.N {
-		boolSink = cove.NeedExpr(2, req)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.NeedExpr(requirementInputs[i%len(requirementInputs)], req)
 	}
 }
 
@@ -97,16 +118,21 @@ func BenchmarkStepExprWith(b *testing.B) {
 	expr := kont.ExprBind(kont.ExprPerform(ping{}), func(v int) kont.Expr[int] {
 		return kont.ExprReturn(v + 1)
 	})
+	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		_, sv := cove.StepExprWith("ctx", expr)
-		sv.Resume(41)
+		result, _ := sv.Resume(41)
+		intSink = result
 	}
 }
 
 func BenchmarkCheckRuleExpr(b *testing.B) {
 	rule := cove.RequireExpr("positive", cove.ExprAtom(func(v int) bool { return v > 0 }))
-	for range b.N {
-		boolSink = cove.CheckRuleExpr(2, rule).OK()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		boolSink = cove.CheckRuleExpr(requirementInputs[i%len(requirementInputs)], rule).OK()
 	}
 }
 
@@ -115,8 +141,10 @@ func BenchmarkCheckedExprIntoView(b *testing.B) {
 		cove.ExprAtom(func(v int) bool { return v > 0 }),
 		42,
 	)
-	for range b.N {
-		_, boolSink = checked.IntoView(1)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		viewSink, boolSink = checked.IntoView(requirementInputs[i%len(requirementInputs)])
 	}
 }
 
@@ -125,8 +153,11 @@ func BenchmarkResumeWith(b *testing.B) {
 	expr := kont.ExprBind(kont.ExprPerform(ping{}), func(v int) kont.Expr[int] {
 		return kont.ExprReturn(v + 1)
 	})
+	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		_, sv := cove.StepExprWith(42, expr)
-		sv.ResumeWith(41, func(v int) int { return v - 1 })
+		result, done := sv.ResumeWith(41, func(v int) int { return v - 1 })
+		viewSink = cove.View[int, int]{Ctx: done.Ask(), Value: result}
 	}
 }
