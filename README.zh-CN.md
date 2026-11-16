@@ -93,10 +93,7 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 计算完成后，`sv.Suspension` 变为 nil，但 `sv.Ask()` 仍返回所携带的上下文。
 
-cove 直接转发 kont 的步进分类器，因此 `Step`、`StepExpr`、`StepWith`、`StepExprWith`、`Resume`、`ResumeWith` 继承了
-kont 的 nil 完成约定：完成通过 nil Suspension（暂挂）观测，在这种情况下，完成值遵循 kont 的 nil 完成约定
-（完成值为 nil 表示以 `A` 的零值完成）。因此，结果类型为可空类型（指针、接口、映射、切片、通道或函数）的计算不能
-将 nil 当作有意义的完成值；当需要区分这一情形时，请将 nil 包裹在显式的求和类型或见证类型中。所携带的上下文不受影响。
+cove 直接使用 kont 的步进分类：nil 挂起指针表示计算完成，返回值是完成结果。对于允许 nil 的类型，nil 是有效结果；接口中带类型的 nil 会保留其动态类型。挂起步骤也可能返回 `A` 的零值，因此应检查挂起指针来判断是否完成。所携带的上下文保持不变。
 
 `ObserveSuspension` 在不进行任何需求检查的前提下，为已有的 `kont.Suspension` 附加环境上下文。`CheckSuspension` 与
 `CheckSuspensionExpr` 提供带门控的对应版本：
@@ -125,6 +122,11 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` 和 `StepExpr` 重新导出 kont 的评估器，不绑定上下文。
+
+检查拒绝时不会消耗原暂挂；应保留它，直到重新检查或显式 `Discard`。先从所有者更新上下文，并在检查至授权操作之间保护条件，
+包括回调重入的影响。`ResumeWith` 在推进之后执行映射，完成时也如此。`ResumeTo` 只检查传入的世界边，不获取新观测，也不检查任意需求。
+可撤销的资格不等于持久 forcing；`StepIndex` 是逻辑额度，不是时间。派发、续体推进和外部资源释放各有独立契约；`Discard` 不会完成 I/O。
+[时序示例](temporal_example_test.go) 使用不持有外部资源的纯操作，演示拒绝、刷新与完成。
 
 ## 步进索引 Kripke 证据
 
@@ -281,7 +283,7 @@ Expr 形式的对应物：`GuardExpr`、`GuardRuleExpr`、`CheckedExpr`、`Guard
 
 ## View 操作
 
-`View[C, A]` 是 Go 类型范畴上的余单子。载体为积 C × A，`Extract`（ε）投影值，`Duplicate`（δ）将观察嵌入为焦点值：
+对于固定的 C 和纯回调，`View[C, A]` 具有下文描述的环境余单子结构。载体为积 C × A，`Extract`（ε）投影值，`Duplicate`（δ）将观察嵌入为焦点值：
 
 ```go
 v := cove.Observe(ctx, value)
@@ -318,19 +320,15 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 
 ## 形式结构
 
-`View[C, A]` 是环境余单子 (Uustalu & Vene 2008)，载体为 C × A，余单位 ε = π₂（Extract），余乘法 δ(c, a) = (c, (c, a))
-（Duplicate）。`Extend` 实现上下文扩展（范畴论中的余 Kleisli 扩展）。
+在 C 固定、回调为纯全函数的条件下，`View[C, A]` 是环境余单子 (Uustalu & Vene 2008)：载体为 C × A，余单位 ε = π₂（`Extract`），余乘法 δ(c, a) = (c, (c, a))（`Duplicate`）。`Extend` 实现余 Kleisli 扩展。等式表示上下文稳定时的观测等价，不要求值或函数在 Go 中可比较。
 
-`Req[C]` 和 `ReqExpr[C]` 是 C 上谓词布尔代数中的对象。`Pullback` 实现由态射 f: C → D 诱导的逆变函子 f*，将 D 上的谓词映射为 C 上的谓词。`ExprPullback` 保持布尔代数结构：f*(p ∧ q) = f*(p) ∧ f*(q)，f*(¬p) = ¬f*(p)。
+`Req[C]` 表示谓词，`ReqExpr[C]` 保存以不透明函数为原子的布尔语法。对于纯谓词和纯投影，`Pullback` 实现由 f: C → D 诱导的逆变映射 f*。`ExprPullback` 保持布尔结构：f*(p ∧ q) = f*(p) ∧ f*(q)，f*(¬p) = ¬f*(p)。求值时可能对每个访问到的原子调用投影。
 
-kont 建模代数效应（自由单子、处理器、折叠）；cove 建模余效应（余单子、需求、展开）。二者在挂起边界上互为范畴对偶：kont
-描述计算对世界做了什么，cove 陈述计算从世界需要什么。
+kont 提供带效应的计算与恢复操作；cove 携带观测和检查这些边界所需的上下文。事实获取、同步控制、执行及资源生命周期由调用者负责。
 
-从模态效应（modal effects）的角度看，载体形状可读作对环境上下文之变化的命名：kont（C → D）替换之，cove（W(C, A) →
-B）以相对方式处理之，纯透传则保持之。效应结构因此搭载于载体之上，而非函数的"颜色"之上——这正是 cove 保持策略无关的原因。
+组合需求按从左到右的顺序短路求值。`All`、`Any`、`ExprAll` 和 `ExprAny` 会保留通过切片传入的多个操作数；使用期间应保持该存储不变。View 的副本共享所引用的存储。`ExprAtom` 和 `ReifyReq` 要求非 nil 谓词。
 
-`ReqExpr` 将布尔代数去函数化为标签联合——布尔签名函子的始代数——使需求的结构成为可检查的数据，而非不透明的闭包 (Reynolds
-1972)。
+`ReqExpr` 用数据表示布尔组合，叶子谓词仍是 Go 函数，求值过程解释执行该结构。`ReifyReq` 将不透明谓词包装为原子，不会从闭包提取语法或自动特化执行。
 
 ## 实用范式
 
@@ -347,11 +345,10 @@ req := cove.All(
 // 2. 用该需求守护一个值——产生 Checked[Caps, T]。
 checked := cove.Guard(req, payload)
 
-// 3. 物化为 Expr，从而能在不同的环境上下文下逐步求值。
-expr := cove.ReifyReq(req)
-ok   := cove.NeedExpr(Caps{CanSubmit: true, HasToken: true}, expr)
-_    = checked
-_    = ok
+// 3. 在具体上下文中检查需求，然后使用该值。
+if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
+	_ = view.Extract()
+}
 ```
 
 `Pullback` 让调用者把定义在某个上下文上的需求适配到另一个上下文（`Pullback(req, f)`，其中 `f: D → C`）；`MapChecked` 与

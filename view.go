@@ -32,7 +32,7 @@ func Duplicate[C Ambient, A Focus](v View[C, A]) View[C, View[C, A]] {
 }
 
 // Extend applies f to the whole view and preserves the ambient context.
-// Together with [Extract] and [Duplicate], it defines the core view operations.
+// Together with [View.Extract] and [Duplicate], it defines the core view operations.
 func Extend[C Ambient, A, B Focus](v View[C, A], f func(View[C, A]) B) View[C, B] {
 	return View[C, B]{Ctx: v.Ctx, Value: f(v)}
 }

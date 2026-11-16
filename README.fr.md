@@ -101,12 +101,7 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 Une fois la computation terminée, `sv.Suspension` devient nil, mais `sv.Ask()` continue de renvoyer le contexte porté.
 
-cove relaie le classificateur de stepping de kont, donc `Step`, `StepExpr`, `StepWith`, `StepExprWith`, `Resume` et
-`ResumeWith` héritent de la convention de fin par nil de kont : la fin est observée par une suspension nil, auquel cas
-la valeur finale suit la convention de kont (une valeur nil dénote la valeur zéro de `A`). Les computations dont le
-type de résultat est un type acceptant nil (pointeur, interface, map, slice, canal ou fonction) ne peuvent donc pas
-utiliser nil comme valeur finale significative ; encapsulez nil dans un type somme ou témoin explicite lorsque cette
-distinction compte. Le contexte du porteur n’est pas affecté.
+cove utilise la classification de kont : une suspension nil indique la fin du calcul, et la valeur renvoyée est le résultat final. Nil est un résultat valide pour un type qui l’accepte ; une interface contenant un nil typé conserve son type dynamique. Une étape suspendue peut également renvoyer la valeur zéro de `A` : vérifiez donc la suspension pour identifier la fin. Le contexte porté est conservé.
 
 `ObserveSuspension` attache le contexte ambiant à une `kont.Suspension` existante sans effectuer aucune vérification
 d’exigence. `CheckSuspension` et `CheckSuspensionExpr` en fournissent les variantes conditionnées :
@@ -135,6 +130,14 @@ val, sv = sv.Resume(result)
 ```
 
 `Step` et `StepExpr` réexportent les évaluateurs de kont sans lier de contexte.
+
+Un contrôle refusé ne consomme pas la suspension originale ; conservez-la jusqu'au prochain contrôle ou à un `Discard`
+explicite. Actualisez le contexte depuis son propriétaire et protégez la condition jusqu'à l'action autorisée, y compris
+contre la réentrée des callbacks. `ResumeWith` applique le mapping après l'avancement, y compris à la fin.
+`ResumeTo` vérifie une arête fournie ; il n'acquiert aucune observation fraîche et ne contrôle aucune exigence arbitraire.
+L'éligibilité révocable n'est pas un forcing persistant ; `StepIndex` est un crédit logique, pas du temps. Dispatch,
+avancement et libération des ressources externes ont des contrats distincts ; `Discard` ne termine pas les I/O.
+L'[exemple temporel](temporal_example_test.go) montre refus, actualisation et fin avec une opération pure.
 
 ## Preuve Kripke step-indexed
 
@@ -303,7 +306,7 @@ if view, report := guardedExpr.IntoView(runtime); report.OK() {
 
 ## Opérations View
 
-`View[C, A]` est une comonade sur la catégorie des types Go. Le porteur est le produit C × A ; `Extract` (ε) projette la valeur ; `Duplicate` (δ) plonge l’observation comme valeur focalisée :
+Pour C fixé et des callbacks purs, `View[C, A]` possède la structure de comonade d’environnement décrite plus bas. Le porteur est le produit C × A ; `Extract` (ε) projette la valeur ; `Duplicate` (δ) plonge l’observation comme valeur focalisée :
 
 ```go
 v := cove.Observe(ctx, value)
@@ -341,24 +344,15 @@ en préservant le contexte ambiant. La composition de commandes induite avec `g:
 
 ## Structure formelle
 
-`View[C, A]` est une comonade d’environnement (Uustalu & Vene 2008) de porteur C × A, counité ε = π₂ (Extract) et
-comultiplication δ(c, a) = (c, (c, a)) (Duplicate). `Extend` implémente l’extension contextuelle (extension coKleisli en
-littérature catégorique).
+Pour C fixé et des callbacks purs et totaux, `View[C, A]` est une comonade d’environnement (Uustalu & Vene 2008) : porteur C × A, counité ε = π₂ (`Extract`) et comultiplication δ(c, a) = (c, (c, a)) (`Duplicate`). `Extend` implémente l’extension coKleisli. Les équations expriment une égalité observationnelle avec un contexte stable ; elles n’exigent pas de valeurs ou de fonctions comparables en Go.
 
-`Req[C]` et `ReqExpr[C]` sont des objets de l’algèbre booléenne des prédicats sur C. `Pullback` implémente le foncteur contravariant f* induit par un morphisme f: C → D, envoyant les prédicats sur D vers les prédicats sur C. `ExprPullback` préserve la structure d’algèbre booléenne : f*(p ∧ q) = f*(p) ∧ f*(q), f*(¬p) = ¬f*(p).
+`Req[C]` désigne un prédicat ; `ReqExpr[C]` conserve une syntaxe booléenne dont les atomes sont des fonctions opaques. Pour des prédicats et projections purs, `Pullback` implémente l’application contravariante f* induite par f: C → D. `ExprPullback` préserve la structure booléenne : f*(p ∧ q) = f*(p) ∧ f*(q), f*(¬p) = ¬f*(p). La projection peut être appelée pour chaque atome visité.
 
-kont modélise les effets algébriques (monade libre, gestionnaires, pli) ; cove modélise les coeffets (comonade,
-exigences, dépli). Les deux sont des duaux catégoriques à la frontière de suspension : kont décrit ce que le calcul fait
-au monde, tandis que cove énonce ce dont le calcul a besoin du monde.
+kont fournit les calculs avec effets et les reprises ; cove transporte le contexte nécessaire pour observer et vérifier leurs frontières. L’appelant acquiert les faits, fournit la synchronisation et gère l’exécution ainsi que la durée de vie des ressources.
 
-Lu à travers le prisme des effets modaux, la forme du porteur peut se lire comme le nom de ce qui arrive au contexte
-ambiant : kont (C → D) le remplace, cove (W(C, A) → B) le traite relativement, et le passage pur le préserve. La
-structure des effets voyage ainsi sur le porteur, et non sur une « couleur » de fonction, ce qui garde cove libre de
-toute politique.
+Les exigences composées sont évaluées de gauche à droite avec court-circuit. `All`, `Any`, `ExprAll` et `ExprAny` conservent les opérandes multiples fournis par slice ; ce stockage doit rester inchangé pendant son utilisation. Les copies de View partagent le stockage référencé. `ExprAtom` et `ReifyReq` exigent des prédicats non nil.
 
-`ReqExpr` défonctionnalise l’algèbre booléenne en une union étiquetée, à savoir l’algèbre initiale du foncteur de
-signature booléenne, de sorte que la structure d’une exigence soit une donnée inspectable plutôt qu’une fermeture
-opaque (Reynolds 1972).
+`ReqExpr` représente la composition booléenne sous forme de données ; les prédicats feuilles restent des fonctions Go. L’évaluation interprète cette structure. `ReifyReq` enveloppe un prédicat opaque dans un atome ; il n’extrait pas la syntaxe d’une fermeture et ne spécialise pas automatiquement l’exécution.
 
 ## Schémas pratiques
 
@@ -376,11 +370,10 @@ req := cove.All(
 // 2. Conditionner une valeur sur cette exigence. Cela produit un Checked[Caps, T].
 checked := cove.Guard(req, payload)
 
-// 3. Réifier vers un Expr pour pouvoir progresser sous différents contextes ambiants.
-expr := cove.ReifyReq(req)
-ok   := cove.NeedExpr(Caps{CanSubmit: true, HasToken: true}, expr)
-_    = checked
-_    = ok
+// 3. Vérifier l’exigence dans un contexte concret avant d’utiliser la valeur.
+if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
+	_ = view.Extract()
+}
 ```
 
 `Pullback` permet à un appelant d’adapter une exigence définie sur un contexte pour qu’elle s’applique sur un autre (
