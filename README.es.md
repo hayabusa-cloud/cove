@@ -1,4 +1,5 @@
 [![Go Reference](https://pkg.go.dev/badge/code.hybscloud.com/cove.svg)](https://pkg.go.dev/code.hybscloud.com/cove)
+[![Benchmarks](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hayabusa-cloud/cove)](https://goreportcard.com/report/github.com/hayabusa-cloud/cove)
 [![Coverage Status](https://codecov.io/gh/hayabusa-cloud/cove/graph/badge.svg)](https://codecov.io/gh/hayabusa-cloud/cove)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -378,6 +379,10 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 transformaciones a nivel de valor sin volver a comprobar el predicado. La combinación `All` + `Pullback` + `Guard` es la
 forma en que los paquetes río abajo construyen comprobaciones de capacidades tipadas sin acoplarse a un único tipo de
 contexto.
+
+## Medición del rendimiento
+
+La [guía de benchmarks](BENCHMARKS.md) describe cargas comparables, comandos de medición y límites de asignación para su entorno.
 
 ## Referencias
 

@@ -1,4 +1,5 @@
 [![Go Reference](https://pkg.go.dev/badge/code.hybscloud.com/cove.svg)](https://pkg.go.dev/code.hybscloud.com/cove)
+[![Benchmarks](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hayabusa-cloud/cove)](https://goreportcard.com/report/github.com/hayabusa-cloud/cove)
 [![Coverage Status](https://codecov.io/gh/hayabusa-cloud/cove/graph/badge.svg)](https://codecov.io/gh/hayabusa-cloud/cove)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -354,6 +355,10 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 `Pullback` 让调用者把定义在某个上下文上的需求适配到另一个上下文（`Pullback(req, f)`，其中 `f: D → C`）；`MapChecked` 与
 `MapGuarded` 可在不重新检查谓词的前提下，沿值层面的变换搬运被守护的值。`All` + `Pullback` + `Guard`
 这一组合，正是下游包用以构建带类型的能力检查、又不与任一具体上下文类型耦合的方式。
+
+## 性能测量
+
+[基准测试指南](BENCHMARKS.md)提供可比较的工作负载、测量命令和内存分配测量范围，供您在自己的环境中测量。
 
 ## 参考文献
 

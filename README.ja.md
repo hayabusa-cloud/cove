@@ -1,4 +1,5 @@
 [![Go Reference](https://pkg.go.dev/badge/code.hybscloud.com/cove.svg)](https://pkg.go.dev/code.hybscloud.com/cove)
+[![Benchmarks](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/hayabusa-cloud/cove/actions/workflows/benchmarks.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hayabusa-cloud/cove)](https://goreportcard.com/report/github.com/hayabusa-cloud/cove)
 [![Coverage Status](https://codecov.io/gh/hayabusa-cloud/cove/graph/badge.svg)](https://codecov.io/gh/hayabusa-cloud/cove)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -361,6 +362,10 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 `Pullback` を用いると、ある文脈上で定義された要件を別の文脈上で動作するように適応できる（`Pullback(req, f)`、`f: D → C`）。
 `MapChecked` と `MapGuarded` は述語を再検査することなく、値レベルの変換を通してゲート済みの値を運ぶ。`All` + `Pullback` +
 `Guard` の組み合わせは、下流パッケージが特定の文脈型と結合することなく、型付きの能力チェックを構築するための手段である。
+
+## 性能測定
+
+[ベンチマークガイド](BENCHMARKS.md)では、ご自身の環境で比較するためのワークロード、測定コマンド、アロケーションの測定範囲を説明しています。
 
 ## 参考文献
 
