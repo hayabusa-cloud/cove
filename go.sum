@@ -1,2 +1,4 @@
 code.hybscloud.com/kont v0.2.0 h1:HyU8WR7VxZ6QPk52pbvRg6eqrC/PJfGUHdsXlqq9Y+4=
 code.hybscloud.com/kont v0.2.0/go.mod h1:zb6ImF1JVe0X3yBT/aiso1hcdmkrrDGZMoYTzxdCBRc=
+code.hybscloud.com/tempo v0.1.1 h1:3MniXRvmtTiybbb9x9ivW/n81tOJGAsmr0NGz8mD+9o=
+code.hybscloud.com/tempo v0.1.1/go.mod h1:i9lNKbIm1ZN8HCTjI6GnYaEwVxkeivYFQCz0Fhxqmdk=

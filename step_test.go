@@ -11,6 +11,28 @@ import (
 	"code.hybscloud.com/kont"
 )
 
+func TestCheckSuspensionOnCompletion(t *testing.T) {
+	_, susp := cove.Step(kont.Pure(42))
+	positive := func(budget int) bool { return budget > 0 }
+	req := cove.ExprAtom(positive)
+	for _, tc := range []struct {
+		budget  int
+		wantOK  bool
+		wantCtx int
+	}{
+		{budget: 2, wantOK: true, wantCtx: 2},
+		{budget: -1},
+	} {
+		want := cove.SuspensionView[int, int]{Ctx: tc.wantCtx}
+		if got, ok := cove.CheckSuspension(tc.budget, susp, positive); got != want || ok != tc.wantOK {
+			t.Errorf("CheckSuspension(%d) = (%v, %t), want (%v, %t)", tc.budget, got, ok, want, tc.wantOK)
+		}
+		if got, ok := cove.CheckSuspensionExpr(tc.budget, susp, req); got != want || ok != tc.wantOK {
+			t.Errorf("CheckSuspensionExpr(%d) = (%v, %t), want (%v, %t)", tc.budget, got, ok, want, tc.wantOK)
+		}
+	}
+}
+
 func TestCheckSuspensionFailure(t *testing.T) {
 	cont := kont.Perform(ping{})
 	expr := cove.Reify(cont)

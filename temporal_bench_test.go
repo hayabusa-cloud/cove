@@ -9,7 +9,15 @@ import (
 
 	"code.hybscloud.com/cove"
 	"code.hybscloud.com/kont"
+	"code.hybscloud.com/tempo"
 )
+
+type temporalContext struct {
+	eligible   bool
+	generation uint64
+}
+
+func temporalAllowed(c temporalContext) bool { return c.eligible }
 
 var temporalBoolSink bool
 var temporalIntSink int
@@ -67,6 +75,45 @@ func BenchmarkTemporalPullbackSetup(b *testing.B) {
 		b.ResetTimer()
 		for range b.N {
 			temporalExprSink = cove.ExprPullback(req, project)
+		}
+	})
+}
+
+func BenchmarkTemporalProductGuard(b *testing.B) {
+	traces := [...][2]temporalEvent{
+		{temporalReady, temporalComplete},
+		{temporalReady, temporalReturned},
+		{temporalCancel, temporalComplete},
+		{temporalCancel, temporalReturned},
+	}
+	initial := tempo.Both(temporalArmed, temporalEvidence{})
+	canRun := func(obs tempo.Pair[bool, temporalEvidence]) bool { return obs.Left && obs.Right.done }
+	b.Run("Direct", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := range b.N {
+			trace := traces[i%len(traces)]
+			life := temporalArmed.Step(trace[0]).Step(trace[1])
+			evidence := (temporalEvidence{}).Step(trace[0]).Step(trace[1])
+			temporalBoolSink = life.Observe() && evidence.Observe().done
+		}
+	})
+	b.Run("TempoCove", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := range b.N {
+			trace := traces[i%len(traces)]
+			state := initial.Step(trace[0]).Step(trace[1])
+			temporalBoolSink = cove.Need(state.Observe(), canRun)
+		}
+	})
+	b.Run("ConcreteParts", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := range b.N {
+			trace := traces[i%len(traces)]
+			life, evidence := initial.Parts()
+			life = life.Step(trace[0]).Step(trace[1])
+			evidence = evidence.Step(trace[0]).Step(trace[1])
+			obs := tempo.Pair[bool, temporalEvidence]{Left: life.Observe(), Right: evidence.Observe()}
+			temporalBoolSink = cove.Need(obs, canRun)
 		}
 	})
 }

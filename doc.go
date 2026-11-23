@@ -21,6 +21,7 @@
 //
 //   - [code.hybscloud.com/iox] classifies outcome and progress evidence
 //   - [kont] defines suspension and resumption shape
+//   - [code.hybscloud.com/tempo] supplies observations of caller-owned temporal state
 //   - cove carries and checks explicit context
 //   - [code.hybscloud.com/takt] advances execution without taking ownership of that context
 //
@@ -92,6 +93,9 @@
 // A refused requirement check leaves the original suspension unconsumed. Keep
 // that handle, refresh context from its owner, and check before the action being
 // authorized. The owner must protect the interval between check and action.
+// For independent temporal conditions, the caller can use [code.hybscloud.com/tempo.Both],
+// step the product on each matching event, and pass its current observation to
+// [CheckSuspension] or [CheckSuspensionExpr].
 // ResumeWith maps context after advancement; its mapper is not a pre-resume
 // guard. ResumeTo checks a supplied world edge without acquiring fresh context.
 // Revocable eligibility is not persistent forcing, and StepIndex is not a clock.

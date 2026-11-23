@@ -61,8 +61,9 @@ Go 1.27+ が必要。
 
 ## 文脈付きステッピング
 
-`StepWith` と `StepExprWith` は kont 計算を評価し、その最初のサスペンションを環境コンテキストと対にする。各サスペンションはアフィンであり、
-`Resume`、`ResumeWith`、または `Discard` のいずれかによって、ちょうど一度だけ消費される。
+`StepWith` と `StepExprWith` は kont 計算を評価し、その最初のサスペンションを環境コンテキストと対にする。
+返された `SuspensionView` のコピーは同じ `*kont.Suspension` ポインタを共有する。応答を待つ間はビューを保持できる。
+`Resume` または `ResumeWith` で一度だけ再開するか、`Discard` で破棄する。
 
 `Cont` を直接進めるには `StepWith(ctx, m)` を使う。`Reify(m)` は最初のリターンまたは操作まで計算を進める。
 完了した結果は再利用できる。保留中の結果とそのコピーは同じ一回の実行を共有する。
@@ -101,40 +102,40 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 cove は kont のステッピング分類を使用する。nil サスペンションが完了を示し、返される値が完了結果となる。nil を許容する型では nil も有効な結果であり、型付き nil を格納したインタフェースはその動的型を保持する。中断中のステップも `A` のゼロ値を返すことがあるため、完了判定にはサスペンションを使う。保持しているコンテキストは変わらない。
 
-`ObserveSuspension` は既存の `kont.Suspension` に、要件チェックを行わずに環境コンテキストを付与する。`CheckSuspension` と
-`CheckSuspensionExpr` はそのゲート付き版である：
+`ObserveSuspension` は既存のサスペンションにコンテキストを付与する。このドライバはディスパッチのたびに現在のコンテキストを検査し、
+要件を満たさなければサスペンションを破棄する。ここでの `dispatch` は保留中の操作に対する応答を同期的に返す。
 
 ```go
-sv, ok := cove.CheckSuspension(runtime, susp, func(r Runtime) bool {
-    return r.Budget > 0
-})
-if !ok {
-    susp.Discard()
-    return
+canRun := func(r Runtime) bool { return r.Budget > 0 }
+val, susp := cove.Step(m)
+for susp != nil {
+    sv, ok := cove.CheckSuspension(currentContext(), susp, canRun)
+    if !ok {
+        susp.Discard()
+        return
+    }
+    val, susp = susp.Resume(dispatch(sv.Ask(), sv.Op()))
 }
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
+complete(val)
 ```
 
-```go
-exprReq := cove.ExprAtom(func(r Runtime) bool { return r.Budget > 0 })
-sv, ok := cove.CheckSuspensionExpr(runtime, susp, exprReq)
-if !ok {
-    susp.Discard()
-    return
-}
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
-```
+式形式の要件を使うには、`req := cove.ExprAtom(canRun)` を一度構築し、ループ内で
+`cove.CheckSuspensionExpr(currentContext(), susp, req)` を呼ぶ。
 
 `Step` と `StepExpr` はコンテキスト束縛なしで kont の評価器を再エクスポートする。
 
-チェックが拒否されても元のサスペンションは消費されない。再チェックまたは明示的な `Discard` まで保持する。
-所有者からコンテキストを更新し、コールバックの再入も含め、許可した操作まで条件を保護する。
+要件を満たさなければ、所有者は元のサスペンションを保持して後で再確認するか、`Discard` で破棄できる。
+`iox.ErrWouldBlock` の場合、`takt.AdvanceSuspension` と `sess.Advance` は同じサスペンションを返す。
+再試行の前に現在のコンテキストを再確認する。許可した操作を実行するまで、コールバックの再入時も条件が成立するようにする。
 `ResumeWith` のマッパーは完了時も含めて継続を進めた後に実行される。`ResumeTo` は渡された世界エッジを検査するだけで、
 新しい観測の取得や任意の要件の検査は行わない。取り消せる適格性は永続的な forcing ではなく、`StepIndex` は時間ではなく論理的なクレジットである。
 ディスパッチ、継続の進行、外部リソースの解放には別々の契約があり、`Discard` は I/O を完了させない。
-[時間的な観測の例](temporal_example_test.go) は外部リソースを持たない純粋な操作で、拒否、更新、完了を示す。
+
+独立した時間的条件をそれぞれ `tempo.Residual` を実装する具体型で表し、`tempo.Both` で組み合わせる。呼び出し側は
+該当するイベントごとに `state = state.Step(event)` で状態を更新し、`state.Observe()` を `CheckSuspension` に渡す。
+準備完了の通知と先行処理の完了通知はどちらが先に届いてもよい。計算を再開する時点で、現在の世代が引き続き準備完了状態にあり、
+その世代の完了通知を受け取っている必要がある。
+[時間的な観測の例](temporal_example_test.go) · [tempo](https://code.hybscloud.com/tempo)
 
 ## ステップ添字 Kripke 証拠
 
@@ -333,6 +334,7 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 | パッケージ      | 担当領域                           | 圏論的側面               |
 |------------|--------------------------------|---------------------|
 | `kont`     | エフェクト操作、ハンドラ、サスペンションと再開        | 代数 / 自由モナド / 畳み込み   |
+| `tempo`    | 時間的な状態遷移と観測                             | ムーア機械 / 同期積             |
 | **`cove`** | **サスペンション境界をまたぐ環境コンテキスト**      | **余代数 / 余モナド / 展開** |
 | `takt`     | プロアクターディスパッチ、ステップ実行とランナー観測     | 余モデル（ハンドラの双対）       |
 | `uring`    | カーネル I/O：SQE/CQE、リング管理、バッファリング | —                   |
