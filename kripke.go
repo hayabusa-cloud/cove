@@ -278,7 +278,9 @@ func (v IndexedSuspensionView[C, A]) Extract() *kont.Suspension[A] {
 	return v.View.Extract()
 }
 
-// Completed reports whether the indexed suspension frontier has completed.
+// Completed reports whether this view holds a nil suspension.
+// After resuming, check the returned view. Copies of the old view still point
+// to the consumed suspension.
 func (v IndexedSuspensionView[C, A]) Completed() bool { return v.Extract() == nil }
 
 // Op returns the suspended operation.

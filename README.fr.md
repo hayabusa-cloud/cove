@@ -107,7 +107,8 @@ sv = cove.MapContextSuspension(sv, func(r Runtime) Runtime {
 sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 ```
 
-Une fois la computation terminée, `sv.Suspension` devient nil, mais `sv.Ask()` continue de renvoyer le contexte porté.
+Utilisez la vue `sv` renvoyée par `Resume` ou `ResumeWith`. Une fois le calcul terminé, son champ `Suspension` vaut
+nil et `sv.Ask()` renvoie le contexte de la vue.
 
 cove utilise la classification de kont : une suspension nil indique la fin du calcul, et la valeur renvoyée est le résultat final. Nil est un résultat valide pour un type qui l’accepte ; une interface contenant un nil typé conserve son type dynamique. Une étape suspendue peut également renvoyer la valeur zéro de `A` : vérifiez donc la suspension pour identifier la fin. Le contexte porté est conservé.
 

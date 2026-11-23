@@ -137,10 +137,7 @@ func ExampleGuardExpr() {
 }
 
 func ExampleSuspensionView_ResumeWith() {
-	type runtime struct {
-		Budget int
-		kont.Phantom[int]
-	}
+	type runtime struct{ Budget int }
 	type ping struct{ kont.Phantom[int] }
 
 	expr := kont.ExprBind(kont.ExprPerform(ping{}), func(v int) kont.Expr[int] {
@@ -148,15 +145,17 @@ func ExampleSuspensionView_ResumeWith() {
 	})
 
 	_, step := cove.StepExprWith(runtime{Budget: 10}, expr)
-	fmt.Println(step.Ask().Budget)
-	result, sv := step.ResumeWith(41, func(r runtime) runtime {
+	fmt.Println("budget before", step.Ask().Budget)
+	result, next := step.ResumeWith(41, func(r runtime) runtime {
 		r.Budget--
 		return r
 	})
-	fmt.Println(result, sv.Suspension != nil)
+	fmt.Println("budget after", next.Ask().Budget)
+	fmt.Println("result", result, "completed", next.Suspension == nil)
 	// Output:
-	// 10
-	// 42 false
+	// budget before 10
+	// budget after 9
+	// result 42 completed true
 }
 
 func ExampleCheckRuleExpr() {

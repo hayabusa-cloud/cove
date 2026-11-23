@@ -100,7 +100,7 @@ sv = cove.MapContextSuspension(sv, func(r Runtime) Runtime {
 sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 ```
 
-計算が完了すると `sv.Suspension` は nil になるが、`sv.Ask()` は運ばれてきたコンテキストをなお返す。
+`Resume` または `ResumeWith` が返したビュー `sv` を使う。計算が完了したとき、このビューの `Suspension` フィールドは nil で、`sv.Ask()` はビューが保持するコンテキストを返す。
 
 cove は kont のステッピング分類を使用する。nil サスペンションが完了を示し、返される値が完了結果となる。nil を許容する型では nil も有効な結果であり、型付き nil を格納したインタフェースはその動的型を保持する。中断中のステップも `A` のゼロ値を返すことがあるため、完了判定にはサスペンションを使う。保持しているコンテキストは変わらない。
 

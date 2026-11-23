@@ -97,7 +97,7 @@ sv = cove.MapContextSuspension(sv, func(r Runtime) Runtime {
 sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 ```
 
-计算完成后，`sv.Suspension` 变为 nil，但 `sv.Ask()` 仍返回所携带的上下文。
+使用 `Resume` 或 `ResumeWith` 返回的视图 `sv`。计算完成时，该视图的 `Suspension` 字段为 nil，`sv.Ask()` 返回视图携带的上下文。
 
 cove 直接使用 kont 的步进分类：nil 挂起指针表示计算完成，返回值是完成结果。对于允许 nil 的类型，nil 是有效结果；接口中带类型的 nil 会保留其动态类型。挂起步骤也可能返回 `A` 的零值，因此应检查挂起指针来判断是否完成。所携带的上下文保持不变。
 
