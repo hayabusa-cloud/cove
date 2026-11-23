@@ -202,7 +202,7 @@ cmd := cove.Compose(
     func(v cove.View[Runtime, int]) string {
         return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
     },
-    cove.LiftCmd(func(n int) int { return n + 1 }),
+    cove.LiftCmd[Runtime](func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
