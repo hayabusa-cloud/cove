@@ -105,7 +105,8 @@ sv = cove.MapContextSuspension(sv, func(r Runtime) Runtime {
 sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 ```
 
-Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` still returns the carried context.
+Keep the view `sv` returned by `Resume` or `ResumeWith`. On completion, `sv.Suspension` is nil and `sv.Ask()` returns
+the carried context.
 
 cove forwards kont's stepping classifier: a nil suspension identifies completion, and the returned value is the completed result. Nil is a valid result for a nilable type; an interface containing a typed nil retains its dynamic type. Suspended steps may also return the zero value of `A`, so inspect the suspension to distinguish completion. Carrier context is preserved.
 

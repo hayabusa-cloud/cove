@@ -83,8 +83,8 @@
 // [Step] and [StepExpr] report completion with a nil *[kont.Suspension].
 // [StepWith], [StepExprWith], [SuspensionView.Resume], and
 // [SuspensionView.ResumeWith] report completion with a nil
-// [SuspensionView.Suspension] field. Use that field to detect completion;
-// pending steps may also return the zero value of A. The completed value follows
+// [SuspensionView.Suspension] field in the returned view. A pending step may
+// also return the zero value of A. The completed value follows
 // kont's classifier: a nil payload becomes the zero value of A, and a typed nil
 // inside an interface retains its dynamic type. Nil is a valid completed value
 // for a nilable result type. [SuspensionView.Ask] preserves the carried context

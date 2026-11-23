@@ -13,10 +13,11 @@ type Operation = kont.Operation
 type Resumed = kont.Resumed
 
 // SuspensionView pairs ambient context with a pointer to a [kont.Suspension].
-// Copies of the view share that pointer and its one-shot continuation.
 // Its Op and Resume methods satisfy [code.hybscloud.com/takt.SuspensionLike].
-// A completed step returns a view with a nil Suspension. Op, Resume,
-// ResumeWith, and Discard panic on a nil Suspension.
+//
+// Resuming or discarding any copy consumes the suspension for all copies.
+// After resuming, use the returned view. Its Suspension is nil on completion.
+// Op, Resume, ResumeWith, and Discard panic on a nil Suspension.
 type SuspensionView[C Ambient, A Focus] struct {
 	Ctx        C
 	Suspension *kont.Suspension[A]
@@ -74,32 +75,24 @@ func (v SuspensionView[C, A]) pending() *kont.Suspension[A] {
 	return v.Suspension
 }
 
-// Op returns the suspended operation.
-// It panics after completion.
+// Op returns the pending operation. It may be called repeatedly before resume
+// or discard. It panics if v.Suspension is nil.
 func (v SuspensionView[C, A]) Op() Operation { return v.pending().Op() }
 
 // Resume advances the suspension and keeps the current context.
-// When the resumed computation completes, the returned value follows kont's
-// nil-completion convention: a nil completed payload becomes the zero value of A.
-// Callers must use the returned [SuspensionView] (which has a nil suspension on
-// completion) to detect completion, rather than testing the value of A.
-// It panics after completion.
+// A nil Suspension in the returned view marks completion. A nil completed
+// payload yields the zero value of A.
+// It panics if v.Suspension is nil or has already been consumed.
 func (v SuspensionView[C, A]) Resume(value Resumed) (A, SuspensionView[C, A]) {
 	return v.ResumeWith(value, nil)
 }
 
-// ResumeWith advances the suspension and optionally maps the context for the
-// next step.
-// When the resumed computation completes, the returned value follows kont's
-// nil-completion convention: a nil completed payload becomes the zero value of A.
-// Callers must use the returned [SuspensionView] (which has a nil suspension on
-// completion) to detect completion, rather than testing the value of A.
-// It panics after completion.
-// A nil mapper keeps the current context, so ResumeWith strictly generalizes
-// [Resume].
-// The mapper runs after the continuation advances, including on completion.
-// Refresh context and check any pre-resume requirement before calling ResumeWith;
-// advance only the returned successor. Resumption does not settle external I/O.
+// ResumeWith advances the suspension as [SuspensionView.Resume] does, then
+// applies f to the context for the returned view, including on completion.
+// A nil f keeps the current context.
+//
+// Check any pre-resume requirement against fresh context before calling ResumeWith.
+// The caller handles external I/O completion separately.
 func (v SuspensionView[C, A]) ResumeWith(value Resumed, f func(C) C) (A, SuspensionView[C, A]) {
 	result, next := v.pending().Resume(value)
 	if f != nil {
@@ -110,7 +103,7 @@ func (v SuspensionView[C, A]) ResumeWith(value Resumed, f func(C) C) (A, Suspens
 }
 
 // Discard consumes the suspension without resuming it.
-// It panics after completion.
+// It panics if v.Suspension is nil.
 func (v SuspensionView[C, A]) Discard() {
 	v.pending().Discard()
 }
