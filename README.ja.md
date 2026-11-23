@@ -143,7 +143,8 @@ val, sv = sv.Resume(result)
 `CheckInvariantTransition` は具体的な世界エッジを検査する。`Forcing` は要件をその前順序と対にし、`Relation` は世界・有限
 `StepIndex`・値によって意味的妥当性を添字付ける。
 
-`DiscreteWorlds` は等しい世界だけを関連付ける場合に使い、`TotalWorlds` はすべての世界対を関連付ける前順序を与える。
+Go の `==` で世界の値どうしを比較でき、各値が自分自身と等しい場合は `DiscreteWorlds` を使う。
+`TotalWorlds` は任意の二つの世界を関連付ける。
 `ForceExpr` は `ReqExpr` 用の `Force` であり、`CheckRelation`、`WeakenIndexedView`、`WeakenIndexedSuspension` は関係検査とステップ
 credit の弱化を明示する。
 
@@ -170,14 +171,18 @@ later := cove.Later(rel)
 _ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
 ```
 
-操作的な prefix では、`StepWithIndex` と `StepExprWithIndex` が `SuspensionView` を明示的な fuel と対にする。indexed
-`Resume` ごとに 1 ステップ分の credit を消費するため、有限観測が可視的に減少する。後続コンテキストを Kripke 世界拡張として検査する場合は
-`ResumeTo` を使い、完了済み indexed frontier の最終関係は `CheckCompletedRelation` で検査する：
+`StepWithIndex` と `StepExprWithIndex` が最初の結果または操作を返す時点では、ステップの残数は初期値のままである。
+再開するたびに残数が 1 減る。`ResumeTo` は後続の世界が現在の世界の拡張であることも検査する。
+このループは残数が 0 なら操作を実行する前に保留中の継続を破棄する。計算が完了したら、
+`CheckCompletedRelation` で最終的な世界と残りのステップ数における戻り値を検査する。
 
 ```go
-_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
-var val int
-for sv.Extract() != nil {
+val, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+for !sv.Completed() {
+    if sv.Index.IsZero() {
+        sv.Discard()
+        return
+    }
     result := dispatch(sv.Ask(), sv.Op())
     next := sv.Ask()
     next.Epoch++

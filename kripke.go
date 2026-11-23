@@ -41,7 +41,9 @@ func (leq Preorder[C]) TransitiveAt(w0, w1, w2 C) bool {
 	return leq.Extends(w0, w2)
 }
 
-// DiscreteWorlds returns equality as a world preorder for comparable contexts.
+// DiscreteWorlds compares worlds using Go's == operator. For equality to be a
+// preorder, every pair must support comparison and each world must equal itself.
+// NaN is unequal to itself, and comparing interface values holding slices can panic.
 func DiscreteWorlds[C comparable]() Preorder[C] {
 	return func(w, wNext C) bool { return w == wNext }
 }
@@ -347,15 +349,15 @@ func CheckCompletedRelation[C World, A Focus](v IndexedSuspensionView[C, A], val
 // Discard consumes the underlying suspension without resuming it.
 func (v IndexedSuspensionView[C, A]) Discard() { v.View.Discard() }
 
-// StepWithIndex runs a Cont computation and pairs its first suspension with ctx
-// and an explicit step index.
+// StepWithIndex runs m to its first return or operation. The view carries ctx
+// and the full index in either case.
 func StepWithIndex[C World, A Focus](ctx C, index StepIndex, m kont.Cont[Resumed, A]) (A, IndexedSuspensionView[C, A]) {
 	result, susp := kont.Step(m)
 	return result, ObserveIndexedSuspension(ctx, index, susp)
 }
 
-// StepExprWithIndex runs an Expr computation and pairs its first suspension with
-// ctx and an explicit step index.
+// StepExprWithIndex runs m to its first return or operation. The view carries
+// ctx and the full index in either case.
 func StepExprWithIndex[C World, A Focus](ctx C, index StepIndex, m kont.Expr[A]) (A, IndexedSuspensionView[C, A]) {
 	result, susp := kont.StepExpr(m)
 	return result, ObserveIndexedSuspension(ctx, index, susp)

@@ -93,6 +93,34 @@ func ExampleStepExprWith() {
 	// 42 false
 }
 
+func ExampleStepExprWithIndex() {
+	type read struct{ kont.Phantom[int] }
+	run := func(credit cove.StepIndex, expr kont.Expr[int]) {
+		value, step := cove.StepExprWithIndex(42, credit, expr)
+		for !step.Completed() {
+			if step.Index.IsZero() {
+				step.Discard()
+				fmt.Println("out of credit")
+				return
+			}
+			fmt.Println("read")
+			value, step = step.Resume(step.Ask())
+		}
+		fmt.Println("result", value)
+	}
+
+	readOnce := kont.ExprPerform(read{})
+	run(0, kont.ExprReturn(17))
+	run(1, readOnce)
+	run(1, kont.ExprThen(readOnce, readOnce))
+	// Output:
+	// result 17
+	// read
+	// result 42
+	// read
+	// out of credit
+}
+
 func ExampleGuardExpr() {
 	type runtime struct{ Budget int }
 	checked := cove.GuardExpr(

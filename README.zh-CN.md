@@ -138,8 +138,9 @@ val, sv = sv.Resume(result)
 局部检查；`Transition[C]`、`CheckTransition`、`CheckForcingTransition` 与 `CheckInvariantTransition` 检查具体世界边；
 `Forcing` 将需求与该预序配对，`Relation` 按世界、有限 `StepIndex` 与值索引语义有效性。
 
-`DiscreteWorlds` 适用于只允许相等世界的场景，`TotalWorlds` 则给出任意两个世界都相关的预序。`ForceExpr` 是 `ReqExpr` 对应的
-`Force`；`CheckRelation`、`WeakenIndexedView` 与 `WeakenIndexedSuspension` 显式表达关系检查和步进额度弱化。
+当世界值可以用 Go 的 `==` 比较且每个值都等于自身时，使用 `DiscreteWorlds`。`TotalWorlds` 将任意两个世界关联起来。
+`ForceExpr` 是 `Force` 在 `ReqExpr` 上的对应形式。`CheckRelation`、`WeakenIndexedView` 与 `WeakenIndexedSuspension`
+显式表达关系检查和步进额度弱化。
 
 ```go
 type RuntimeWorld struct {
@@ -164,14 +165,17 @@ later := cove.Later(rel)
 _ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
 ```
 
-对于操作前缀，`StepWithIndex` 和 `StepExprWithIndex` 会把 `SuspensionView` 与显式 fuel 配对。每次 indexed `Resume`
-都消耗一个步进额度，使有限观测可见地递减。需要把后继上下文检查为 Kripke 世界扩展时使用 `ResumeTo`；完成后的 indexed
-frontier 可用 `CheckCompletedRelation` 检查最终关系：
+`StepWithIndex` 和 `StepExprWithIndex` 返回第一个结果或操作时保留全部初始步数。每次恢复执行消耗一步。
+`ResumeTo` 还会检查后继世界是否扩展了当前世界。如果剩余步数为零，这个循环会在分派操作前丢弃待恢复的续体。
+计算完成后，`CheckCompletedRelation` 根据最终世界和剩余步数检查返回值。
 
 ```go
-_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
-var val int
-for sv.Extract() != nil {
+val, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+for !sv.Completed() {
+    if sv.Index.IsZero() {
+        sv.Discard()
+        return
+    }
     result := dispatch(sv.Ask(), sv.Op())
     next := sv.Ask()
     next.Epoch++
