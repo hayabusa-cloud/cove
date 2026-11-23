@@ -6,16 +6,17 @@ package cove
 
 import "code.hybscloud.com/kont"
 
-// Reify converts a [kont.Cont] computation to [kont.Expr].
-// Prefer [StepWith] or [StepExprWith] when the caller needs the contextual
-// suspension boundary.
+// Reify runs m to its first return or operation and captures the result as a [kont.Expr].
+// A completed result is reusable. A pending result and its copies share one invocation.
+// Stepping it a second time through any copy panics before yielding the operation.
+// Reify a reusable computation again for each run. Use [StepWith] to step m directly.
 func Reify[A Focus](m kont.Cont[Resumed, A]) kont.Expr[A] {
 	return kont.Reify(m)
 }
 
-// Reflect converts a [kont.Expr] computation to [kont.Cont].
-// Prefer [StepWith] or [StepExprWith] when the caller needs the contextual
-// suspension boundary.
+// Reflect converts m to a [kont.Cont]. If m is a pending [Reify] result,
+// evaluating the returned computation consumes that same invocation.
+// Use [StepExprWith] to step m directly.
 func Reflect[A Focus](m kont.Expr[A]) kont.Cont[Resumed, A] {
 	return kont.Reflect(m)
 }

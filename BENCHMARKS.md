@@ -1,6 +1,6 @@
 # Measuring cove
 
-Run the benchmarks with Go 1.26+ on the machine and dependency versions used by your application. Record `go version`, `go env GOOS GOARCH GOEXPERIMENT`, `go list -m all`, CPU details, and `GOMAXPROCS` with each measurement.
+Run the benchmarks with Go 1.27+ on the machine and dependency versions used by your application. Record `go version`, `go env GOOS GOARCH GOEXPERIMENT`, `go list -m all`, CPU details, and `GOMAXPROCS` with each measurement.
 
 The [Benchmarks workflow](.github/workflows/benchmarks.yml) can also be run manually on GitHub. Choose the benchmark filter, duration and repetition count; the job records its environment and raw measurements in the logs. Use the commands below to measure on your deployment machine.
 

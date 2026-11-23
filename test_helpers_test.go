@@ -12,16 +12,21 @@ import (
 
 type ping struct{ kont.Phantom[int] }
 
-func expectPanicMessage(t *testing.T, want string, f func()) {
+func expectPanic(t *testing.T, f func()) (got any) {
 	t.Helper()
 	defer func() {
-		r := recover()
-		if r == nil {
+		got = recover()
+		if got == nil {
 			t.Fatal("expected panic")
-		}
-		if s, ok := r.(string); !ok || s != want {
-			t.Fatalf("unexpected panic value: %v", r)
 		}
 	}()
 	f()
+	return nil
+}
+
+func expectPanicMessage(t *testing.T, want string, f func()) {
+	t.Helper()
+	if got := expectPanic(t, f); got != want {
+		t.Fatalf("unexpected panic value: %v", got)
+	}
 }

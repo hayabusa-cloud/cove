@@ -35,7 +35,7 @@ for sv.Suspension != nil {
 go get code.hybscloud.com/cove
 ```
 
-Go 1.26+ が必要。
+Go 1.27+ が必要。
 
 ## コア型
 
@@ -63,6 +63,11 @@ Go 1.26+ が必要。
 
 `StepWith` と `StepExprWith` は kont 計算を評価し、その最初のサスペンションを環境コンテキストと対にする。各サスペンションはアフィンであり、
 `Resume`、`ResumeWith`、または `Discard` のいずれかによって、ちょうど一度だけ消費される。
+
+`Cont` を直接進めるには `StepWith(ctx, m)` を使う。`Reify(m)` は最初のリターンまたは操作まで計算を進める。
+完了した結果は再利用できる。保留中の結果とそのコピーは同じ一回の実行を共有する。
+`Reflect` を経由する場合も、同じ結果を二度ステップすると panic する。
+繰り返し実行するには、元の再利用可能な `Cont` に毎回 `Reify` を適用する。
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -390,7 +395,7 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 
 ## プラットフォームサポート
 
-`cove` はこのモジュール内の純粋 Go パッケージである。プラットフォーム固有ファイルや build tag はなく、必要条件は Go 1.26+ のみ。
+`cove` はこのモジュール内の純粋 Go パッケージである。プラットフォーム固有ファイルや build tag はなく、必要条件は Go 1.27+ のみ。
 
 ## ライセンス
 

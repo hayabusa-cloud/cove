@@ -23,6 +23,7 @@ func TestSteppingBridge(t *testing.T) {
 	}
 
 	expr := cove.Reify(cont)
+	reflectedCopy := cove.Reflect(expr)
 	_, step := cove.StepExprWith("ctx", expr)
 	if step.Suspension == nil {
 		t.Fatal("expected expr-world suspension")
@@ -33,6 +34,7 @@ func TestSteppingBridge(t *testing.T) {
 	if _, ok := step.Op().(ping); !ok {
 		t.Fatalf("unexpected step op type: %#v", step.Op())
 	}
+	expectPanic(t, func() { cove.Step(reflectedCopy) })
 	guarded := cove.Guard(func(v int) bool { return v > 0 }, step.Extract())
 	if !guarded.Check(1) {
 		t.Fatal("expected guarded suspension success")
@@ -49,13 +51,34 @@ func TestSteppingBridge(t *testing.T) {
 		t.Fatalf("unexpected result: %d", result)
 	}
 
-	reflected := cove.Reflect(expr)
-	if _, susp := cove.Step(reflected); susp == nil {
+	fresh := cove.Reify(cont)
+	_, susp := cove.Step(cove.Reflect(fresh))
+	if susp == nil {
 		t.Fatal("expected reflected cont-world suspension")
-	} else if _, ok := susp.Op().(ping); !ok {
+	}
+	if _, ok := susp.Op().(ping); !ok {
 		t.Fatalf("unexpected reflected op type: %#v", susp.Op())
-	} else {
-		susp.Discard()
+	}
+	expectPanic(t, func() { cove.StepExpr(fresh) })
+	if result, next := susp.Resume(9); result != 10 || next != nil {
+		t.Fatalf("reflected run returned %d, %v", result, next)
+	}
+}
+
+func TestReifyCompleted(t *testing.T) {
+	calls := 0
+	m := func(k func(int) kont.Resumed) kont.Resumed {
+		calls++
+		return k(42)
+	}
+	expr := cove.Reify(m)
+	if calls != 1 {
+		t.Fatalf("Reify ran the computation %d times, want 1", calls)
+	}
+	for range 2 {
+		if result, next := cove.StepExpr(expr); result != 42 || next != nil || calls != 1 {
+			t.Fatalf("StepExpr returned %d, %v after %d evaluations", result, next, calls)
+		}
 	}
 }
 

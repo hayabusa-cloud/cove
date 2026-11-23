@@ -39,7 +39,7 @@ The package is policy-free: it carries and checks context, but never schedules, 
 go get code.hybscloud.com/cove
 ```
 
-Requires Go 1.26+.
+Requires Go 1.27+.
 
 ## Core Types
 
@@ -67,6 +67,10 @@ and `Focus` constrains value type parameters (A, B).
 
 `StepWith` and `StepExprWith` evaluate a kont computation and pair its first suspension with ambient context. Each
 suspension is affine: consume it exactly once, via `Resume`, `ResumeWith`, or `Discard`.
+
+Use `StepWith(ctx, m)` to step a `Cont` directly. `Reify(m)` runs to the first return or operation. A completed result
+is reusable. A pending result and its copies share one invocation. Stepping it twice panics, including through
+`Reflect`. Reify the original reusable `Cont` again for each run.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -405,7 +409,7 @@ See the [benchmark guide](BENCHMARKS.md) for comparable workloads, measurement c
 
 ## Platform Support
 
-`cove` is a pure Go package in this module. It has no platform-specific files or build tags; the module requirement is Go 1.26+.
+`cove` is a pure Go package in this module. It has no platform-specific files or build tags; the module requirement is Go 1.27+.
 
 ## License
 

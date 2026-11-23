@@ -99,7 +99,8 @@
 //
 // Bridge helpers:
 //
-//   - [Step], [StepExpr], [Reify], and [Reflect] wrap kont's computation forms without binding context
+//   - [Step] and [StepExpr] step a computation directly
+//   - [Reify] captures one invocation. [Reflect] shares it when the result is pending.
 //   - [ReifyReq] and [ReflectReq] bridge cove's closure and expression requirements
 //
 // Laws below assume pure, total callbacks and stable context. Equality is

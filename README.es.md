@@ -39,7 +39,7 @@ El paquete es libre de políticas: transporta y verifica el contexto, pero nunca
 go get code.hybscloud.com/cove
 ```
 
-Requiere Go 1.26+.
+Requiere Go 1.27+.
 
 ## Tipos principales
 
@@ -67,6 +67,11 @@ Kripke, y `Focus` restringe parámetros de tipo de valor (A, B).
 
 `StepWith` y `StepExprWith` evalúan una computación kont y emparejan su primera suspensión con el contexto ambiental.
 Cada suspensión es afín: se consume exactamente una vez, mediante `Resume`, `ResumeWith` o `Discard`.
+
+Use `StepWith(ctx, m)` para avanzar un `Cont` directamente. `Reify(m)` ejecuta el cálculo hasta el primer retorno u
+operación. Un resultado completado es reutilizable. Un resultado pendiente y sus copias comparten una sola invocación.
+Avanzarlo dos veces provoca un pánico, incluso a través de `Reflect`. Para cada ejecución, vuelva a aplicar `Reify`
+al `Cont` reutilizable original.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -407,7 +412,7 @@ La [guía de benchmarks](BENCHMARKS.md) describe cargas comparables, comandos de
 
 ## Compatibilidad de plataforma
 
-`cove` es un paquete puro de Go en este módulo. No tiene archivos específicos de plataforma ni build tags; el requisito del módulo es Go 1.26+.
+`cove` es un paquete puro de Go en este módulo. No tiene archivos específicos de plataforma ni build tags; el requisito del módulo es Go 1.27+.
 
 ## Licencia
 

@@ -40,7 +40,7 @@ jamais.
 go get code.hybscloud.com/cove
 ```
 
-Nécessite Go 1.26+.
+Nécessite Go 1.27+.
 
 ## Types principaux
 
@@ -68,6 +68,11 @@ structurelle, et `Focus` contraint les paramètres de type de valeur (A, B).
 
 `StepWith` et `StepExprWith` évaluent une computation kont et apparient sa première suspension avec le contexte ambiant.
 Chaque suspension est affine : elle se consomme exactement une fois, via `Resume`, `ResumeWith` ou `Discard`.
+
+Utilisez `StepWith(ctx, m)` pour avancer directement un `Cont`. `Reify(m)` exécute le calcul jusqu’au premier retour
+ou à la première opération. Un résultat terminé est réutilisable. Un résultat en suspens et ses copies partagent une
+seule invocation. Tenter de l’avancer deux fois provoque un panic, y compris via `Reflect`. Pour chaque exécution,
+réappliquez `Reify` au `Cont` réutilisable d’origine.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -410,7 +415,7 @@ Le [guide des benchmarks](BENCHMARKS.md) présente les charges comparables, les 
 
 ## Support de plateforme
 
-`cove` est un paquet Go pur dans ce module. Il n'a ni fichier spécifique à une plateforme ni build tag ; la seule exigence du module est Go 1.26+.
+`cove` est un paquet Go pur dans ce module. Il n'a ni fichier spécifique à une plateforme ni build tag ; la seule exigence du module est Go 1.27+.
 
 ## Licence
 
