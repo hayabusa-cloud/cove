@@ -17,6 +17,7 @@ Use `-bench` to select a workload and adjust `-benchtime`, `-count`, and `GOMAXP
 | `BenchmarkNeed*`, `BenchmarkReflectReqEval`, `BenchmarkReifyReqEval`, `BenchmarkCheckRuleExpr`, `BenchmarkCheckedExprIntoView` | Preconstructed requirements and rules across negative, zero, odd, even and boundary inputs; decisions and returned views are retained |
 | `BenchmarkStepExprWith`, `BenchmarkResumeWith` | Complete expression activations with a fresh suspension and retained completed result; program construction is excluded |
 | `BenchmarkTemporalObservation` | The same eligibility and generation check on changing contexts, using direct fields, `Observe`/`Need`, or a prebuilt expression with a direct or projected generation predicate |
+| `BenchmarkTemporalProductGuard` | Two events per decision across four readiness and receipt combinations. Compares direct transitions, `tempo.Both` with a cove requirement, and `Parts` with concrete transitions and a `tempo.Pair` passed to the same requirement |
 | `BenchmarkTemporalPullbackSetup` | Construction and retention of `Pullback` and `ExprPullback`; setup costs are included |
 | `BenchmarkTemporalResume` | A complete guarded activation, including a fresh kont suspension and terminal resumption |
 | `BenchmarkTemporalSuccessor` | A complete activation that yields and consumes a successor; immutable program construction is excluded |

@@ -60,8 +60,8 @@ go get code.hybscloud.com/cove
 
 ## 上下文步进
 
-`StepWith` 与 `StepExprWith` 对 kont 计算求值，并将其第一个挂起与环境上下文配对。每个挂起都是仿射的：须通过 `Resume`、
-`ResumeWith` 或 `Discard` 恰好消耗一次。
+`StepWith` 与 `StepExprWith` 对 kont 计算求值，并将其第一个挂起与环境上下文配对。返回的 `SuspensionView` 的各个副本共享同一个
+`*kont.Suspension` 指针。等待应答时可以保留视图，用 `Resume` 或 `ResumeWith` 恢复一次，或用 `Discard` 放弃。
 
 用 `StepWith(ctx, m)` 直接推进 `Cont`。`Reify(m)` 将计算推进到首次返回或产生操作。已完成的结果可以复用。
 挂起的结果及其副本共享同一次调用。对同一结果推进两次会触发 panic，经由 `Reflect` 也是如此。
@@ -99,38 +99,37 @@ sv = cove.WithContextSuspension(sv, Runtime{Budget: 16})
 
 cove 直接使用 kont 的步进分类：nil 挂起指针表示计算完成，返回值是完成结果。对于允许 nil 的类型，nil 是有效结果；接口中带类型的 nil 会保留其动态类型。挂起步骤也可能返回 `A` 的零值，因此应检查挂起指针来判断是否完成。所携带的上下文保持不变。
 
-`ObserveSuspension` 在不进行任何需求检查的前提下，为已有的 `kont.Suspension` 附加环境上下文。`CheckSuspension` 与
-`CheckSuspensionExpr` 提供带门控的对应版本：
+`ObserveSuspension` 为已有的挂起附加上下文。下面的驱动在每次分派前检查当前上下文，检查未通过时丢弃挂起。
+这里的 `dispatch` 同步返回当前挂起操作的应答。
 
 ```go
-sv, ok := cove.CheckSuspension(runtime, susp, func(r Runtime) bool {
-    return r.Budget > 0
-})
-if !ok {
-    susp.Discard()
-    return
+canRun := func(r Runtime) bool { return r.Budget > 0 }
+val, susp := cove.Step(m)
+for susp != nil {
+    sv, ok := cove.CheckSuspension(currentContext(), susp, canRun)
+    if !ok {
+        susp.Discard()
+        return
+    }
+    val, susp = susp.Resume(dispatch(sv.Ask(), sv.Op()))
 }
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
+complete(val)
 ```
 
-```go
-exprReq := cove.ExprAtom(func(r Runtime) bool { return r.Budget > 0 })
-sv, ok := cove.CheckSuspensionExpr(runtime, susp, exprReq)
-if !ok {
-    susp.Discard()
-    return
-}
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
-```
+若使用表达式需求，先构造一次 `req := cove.ExprAtom(canRun)`，再在循环内调用
+`cove.CheckSuspensionExpr(currentContext(), susp, req)`。
 
 `Step` 和 `StepExpr` 重新导出 kont 的评估器，不绑定上下文。
 
-检查拒绝时不会消耗原暂挂；应保留它，直到重新检查或显式 `Discard`。先从所有者更新上下文，并在检查至授权操作之间保护条件，
-包括回调重入的影响。`ResumeWith` 在推进之后执行映射，完成时也如此。`ResumeTo` 只检查传入的世界边，不获取新观测，也不检查任意需求。
+检查未通过时，所有者可以保留原挂起，稍后再检查，也可以调用 `Discard`。遇到 `iox.ErrWouldBlock` 时，
+`takt.AdvanceSuspension` 和 `sess.Advance` 都返回同一个挂起句柄。重试前应重新检查当前上下文。
+从检查到执行获准的操作，应确保条件持续成立，包括回调重入期间。`ResumeWith` 在推进之后执行映射，完成时也如此。`ResumeTo` 只检查传入的世界边，不获取新观测，也不检查任意需求。
 可撤销的资格不等于持久 forcing；`StepIndex` 是逻辑额度，不是时间。派发、续体推进和外部资源释放各有独立契约；`Discard` 不会完成 I/O。
-[时序示例](temporal_example_test.go) 使用不持有外部资源的纯操作，演示拒绝、刷新与完成。
+
+用实现 `tempo.Residual` 的具体类型表示各个独立的时序条件，再用 `tempo.Both` 组合。调用方对匹配的事件执行
+`state = state.Step(event)`，并将 `state.Observe()` 传给 `CheckSuspension`。就绪事件和前置操作的完成回执可以按任意顺序到达。
+恢复计算时，当前代次必须仍处于就绪状态，并且已收到属于该代次的完成回执。
+[时序示例](temporal_example_test.go) · [tempo](https://code.hybscloud.com/tempo)
 
 ## 步进索引 Kripke 证据
 
@@ -323,6 +322,7 @@ cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
 | 包          | 职责                     | 范畴性质               |
 |------------|------------------------|--------------------|
 | `kont`     | 效应操作、处理器、挂起与恢复         | 代数 / 自由单子 / 折叠     |
+| `tempo`    | 时序状态转移与观测                 | 摩尔机 / 同步积           |
 | **`cove`** | **跨挂起边界的环境上下文**        | **余代数 / 余单子 / 展开** |
 | `takt`     | 主动器分派、步进与运行器观测         | 余模型（处理器对偶）         |
 | `uring`    | 内核 I/O：SQE/CQE、环管理、缓冲环 | —                  |

@@ -65,8 +65,9 @@ and `Focus` constrains value type parameters (A, B).
 
 ## Contextual Stepping
 
-`StepWith` and `StepExprWith` evaluate a kont computation and pair its first suspension with ambient context. Each
-suspension is affine: consume it exactly once, via `Resume`, `ResumeWith`, or `Discard`.
+`StepWith` and `StepExprWith` evaluate a kont computation and pair its first suspension with ambient context.
+Copies of the returned `SuspensionView` share one `*kont.Suspension`. Keep the view while waiting for a reply.
+Resume it once with `Resume` or `ResumeWith`, or abandon it with `Discard`.
 
 Use `StepWith(ctx, m)` to step a `Cont` directly. `Reify(m)` runs to the first return or operation. A completed result
 is reusable. A pending result and its copies share one invocation. Stepping it twice panics, including through
@@ -106,41 +107,41 @@ Once the computation completes, `sv.Suspension` becomes nil, but `sv.Ask()` stil
 
 cove forwards kont's stepping classifier: a nil suspension identifies completion, and the returned value is the completed result. Nil is a valid result for a nilable type; an interface containing a typed nil retains its dynamic type. Suspended steps may also return the zero value of `A`, so inspect the suspension to distinguish completion. Carrier context is preserved.
 
-`ObserveSuspension` attaches ambient context to an existing `kont.Suspension` without performing any requirement check.
-`CheckSuspension` and `CheckSuspensionExpr` provide gated forms:
+`ObserveSuspension` attaches context to an existing suspension. This driver checks the current context before each
+dispatch and discards the suspension on refusal. Here `dispatch` returns the pending operation's reply synchronously.
 
 ```go
-sv, ok := cove.CheckSuspension(runtime, susp, func(r Runtime) bool {
-    return r.Budget > 0
-})
-if !ok {
-    susp.Discard()
-    return
+canRun := func(r Runtime) bool { return r.Budget > 0 }
+val, susp := cove.Step(m)
+for susp != nil {
+    sv, ok := cove.CheckSuspension(currentContext(), susp, canRun)
+    if !ok {
+        susp.Discard()
+        return
+    }
+    val, susp = susp.Resume(dispatch(sv.Ask(), sv.Op()))
 }
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
+complete(val)
 ```
 
-```go
-exprReq := cove.ExprAtom(func(r Runtime) bool { return r.Budget > 0 })
-sv, ok := cove.CheckSuspensionExpr(runtime, susp, exprReq)
-if !ok {
-    susp.Discard()
-    return
-}
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
-```
+For an expression requirement, build `req := cove.ExprAtom(canRun)` once and use
+`cove.CheckSuspensionExpr(currentContext(), susp, req)` inside the loop.
 
 `Step` and `StepExpr` re-export kont's evaluators without context binding.
 
-A refused check leaves the original suspension unconsumed; retain that handle until a later check or explicit `Discard`.
-Refresh context from its owner before checking, and protect the condition through the action it authorizes, including
-callback reentry. `ResumeWith` runs its mapper after advancement, including completion. `ResumeTo` checks a supplied
+On refusal, the owner can keep the original suspension for a later check or call `Discard`. On `iox.ErrWouldBlock`,
+`takt.AdvanceSuspension` and `sess.Advance` return the same pending handle. Recheck current context before retrying.
+Protect the checked condition through the action it authorizes, including callback reentry.
+`ResumeWith` runs its mapper after advancement, including completion. `ResumeTo` checks a supplied
 world edge; it neither obtains fresh observations nor checks an arbitrary requirement. Revocable eligibility is not
 persistent forcing, and `StepIndex` is logical credit, not time. Dispatch, continuation advancement and external resource
-retirement have separate contracts; `Discard` does not settle I/O. The [temporal example](temporal_example_test.go)
-demonstrates refusal, refresh and completion using a pure operation without external resources.
+retirement have separate contracts; `Discard` does not settle I/O.
+
+Implement `tempo.Residual` for each independent temporal condition and combine the two states with `tempo.Both`.
+The caller applies matching events with `state = state.Step(event)` and passes `state.Observe()` to `CheckSuspension`.
+The readiness signal and the prerequisite's completion receipt can arrive in either order. At resumption, the current
+generation must still be ready and the receipt must match it.
+[Temporal example](temporal_example_test.go) · [tempo](https://code.hybscloud.com/tempo)
 
 ## Step-Indexed Kripke Evidence
 
@@ -343,6 +344,7 @@ preserving the ambient context. The induced command composition with `g: W(C, B)
 | Package    | Owns                                                   | Categorical Aspect               |
 |------------|--------------------------------------------------------|----------------------------------|
 | `kont`     | Effect operations, handlers, suspension and resumption | Algebra / Free monad / Fold      |
+| `tempo`    | Temporal state transitions and observations            | Moore machine / Synchronous product |
 | **`cove`** | **Ambient context across suspension boundaries**       | **Coalgebra / Comonad / Unfold** |
 | `takt`     | Proactor dispatch, stepping and runner observation     | Comodel (handler dual)           |
 | `uring`    | Kernel I/O: SQE/CQE, ring management, buffer rings     | —                                |

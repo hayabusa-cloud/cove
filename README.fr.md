@@ -66,8 +66,9 @@ structurelle, et `Focus` contraint les paramètres de type de valeur (A, B).
 
 ## Stepping contextuel
 
-`StepWith` et `StepExprWith` évaluent une computation kont et apparient sa première suspension avec le contexte ambiant.
-Chaque suspension est affine : elle se consomme exactement une fois, via `Resume`, `ResumeWith` ou `Discard`.
+`StepWith` et `StepExprWith` évaluent une computation kont et associent sa première suspension au contexte ambiant.
+Les copies de la `SuspensionView` renvoyée partagent le même pointeur `*kont.Suspension`. On peut conserver la vue en
+attendant la réponse, la reprendre une fois avec `Resume` ou `ResumeWith`, ou l’abandonner avec `Discard`.
 
 Utilisez `StepWith(ctx, m)` pour avancer directement un `Cont`. `Reify(m)` exécute le calcul jusqu’au premier retour
 ou à la première opération. Un résultat terminé est réutilisable. Un résultat en suspens et ses copies partagent une
@@ -108,41 +109,43 @@ Une fois la computation terminée, `sv.Suspension` devient nil, mais `sv.Ask()` 
 
 cove utilise la classification de kont : une suspension nil indique la fin du calcul, et la valeur renvoyée est le résultat final. Nil est un résultat valide pour un type qui l’accepte ; une interface contenant un nil typé conserve son type dynamique. Une étape suspendue peut également renvoyer la valeur zéro de `A` : vérifiez donc la suspension pour identifier la fin. Le contexte porté est conservé.
 
-`ObserveSuspension` attache le contexte ambiant à une `kont.Suspension` existante sans effectuer aucune vérification
-d’exigence. `CheckSuspension` et `CheckSuspensionExpr` en fournissent les variantes conditionnées :
+`ObserveSuspension` associe un contexte à une suspension existante. Ce pilote vérifie le contexte courant avant
+chaque opération et abandonne la suspension si l’exigence échoue. Ici, `dispatch` renvoie de façon synchrone la
+réponse à l’opération en attente.
 
 ```go
-sv, ok := cove.CheckSuspension(runtime, susp, func(r Runtime) bool {
-    return r.Budget > 0
-})
-if !ok {
-    susp.Discard()
-    return
+canRun := func(r Runtime) bool { return r.Budget > 0 }
+val, susp := cove.Step(m)
+for susp != nil {
+    sv, ok := cove.CheckSuspension(currentContext(), susp, canRun)
+    if !ok {
+        susp.Discard()
+        return
+    }
+    val, susp = susp.Resume(dispatch(sv.Ask(), sv.Op()))
 }
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
+complete(val)
 ```
 
-```go
-exprReq := cove.ExprAtom(func(r Runtime) bool { return r.Budget > 0 })
-sv, ok := cove.CheckSuspensionExpr(runtime, susp, exprReq)
-if !ok {
-    susp.Discard()
-    return
-}
-result := dispatch(sv.Ask(), sv.Op())
-val, sv = sv.Resume(result)
-```
+Pour utiliser une exigence sous forme d’expression, construire `req := cove.ExprAtom(canRun)` une seule fois et
+appeler `cove.CheckSuspensionExpr(currentContext(), susp, req)` dans la boucle.
 
 `Step` et `StepExpr` réexportent les évaluateurs de kont sans lier de contexte.
 
-Un contrôle refusé ne consomme pas la suspension originale ; conservez-la jusqu'au prochain contrôle ou à un `Discard`
-explicite. Actualisez le contexte depuis son propriétaire et protégez la condition jusqu'à l'action autorisée, y compris
-contre la réentrée des callbacks. `ResumeWith` applique le mapping après l'avancement, y compris à la fin.
+En cas de refus, le propriétaire peut conserver la suspension d’origine pour un contrôle ultérieur ou appeler `Discard`.
+En cas d’`iox.ErrWouldBlock`, `takt.AdvanceSuspension` et `sess.Advance` renvoient la même suspension en attente.
+Vérifiez de nouveau le contexte courant avant chaque nouvelle tentative. Protégez la condition jusqu’à l’action
+autorisée, y compris en cas de réentrée d’un callback. `ResumeWith` applique le mapping après l'avancement, y compris à la fin.
 `ResumeTo` vérifie une arête fournie ; il n'acquiert aucune observation fraîche et ne contrôle aucune exigence arbitraire.
 L'éligibilité révocable n'est pas un forcing persistant ; `StepIndex` est un crédit logique, pas du temps. Dispatch,
 avancement et libération des ressources externes ont des contrats distincts ; `Discard` ne termine pas les I/O.
-L'[exemple temporel](temporal_example_test.go) montre refus, actualisation et fin avec une opération pure.
+
+Chaque condition temporelle indépendante se modélise par un type concret qui implémente `tempo.Residual`. L’appelant les
+combine avec `tempo.Both`, applique les événements correspondants avec `state = state.Step(event)` et passe
+`state.Observe()` à `CheckSuspension`. Le signal de disponibilité et la confirmation de fin de l’opération préalable
+peuvent arriver dans l’un ou l’autre ordre. À la reprise du calcul, la génération en cours doit toujours être prête
+et la confirmation doit lui correspondre.
+[Exemple temporel](temporal_example_test.go) · [tempo](https://code.hybscloud.com/tempo)
 
 ## Preuve Kripke step-indexed
 
@@ -348,6 +351,7 @@ en préservant le contexte ambiant. La composition de commandes induite avec `g:
 | Paquet     | Responsabilité                                               | Aspect catégorique               |
 |------------|--------------------------------------------------------------|----------------------------------|
 | `kont`     | Opérations d’effets, gestionnaires, suspension et reprise    | Algèbre / Monade libre / Pli     |
+| `tempo`    | Transitions et observations de l’état temporel                | Machine de Moore / Produit synchrone |
 | **`cove`** | **Contexte ambiant à travers les frontières de suspension**  | **Coalgèbre / Comonade / Dépli** |
 | `takt`     | Dispatch proacteur, stepping et observation du runner        | Comodèle (dual du gestionnaire)  |
 | `uring`    | I/O noyau : SQE/CQE, gestion des anneaux, anneaux de buffers | —                                |

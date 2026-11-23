@@ -10,38 +10,54 @@ import (
 
 	"code.hybscloud.com/cove"
 	"code.hybscloud.com/kont"
+	"code.hybscloud.com/tempo"
 )
 
 func TestTemporalRefusalAndRevocation(t *testing.T) {
+	ready := func(obs tempo.Pair[bool, temporalEvidence]) bool { return obs.Left }
+	completed := func(obs tempo.Pair[bool, temporalEvidence]) bool { return obs.Right.done }
+	req := cove.All(ready, completed)
+	expr := cove.ExprAll(cove.ExprAtom(ready), cove.ExprAtom(completed))
 	for _, expression := range []bool{false, true} {
-		for _, terminal := range []temporalEvent{temporalReady, temporalExpire, temporalCancel} {
+		for _, events := range []struct{ first, second, last temporalEvent }{
+			{temporalReady, temporalComplete, temporalOther},
+			{temporalComplete, temporalReady, temporalOther},
+			{temporalReady, temporalComplete, temporalExpire},
+			{temporalComplete, temporalReady, temporalCancel},
+		} {
 			calls := 0
 			computation := kont.Bind(kont.Perform(temporalValue{input: 41}), func(v int) kont.Eff[int] {
 				calls++
 				return kont.Pure(v)
 			})
-			life := temporalArmed
-			_, owner := cove.StepWith(temporalContext{generation: 7}, computation)
-			check := func() (cove.SuspensionView[temporalContext, int], bool) {
+			state := tempo.Both(temporalArmed, temporalEvidence{})
+			_, susp := cove.Step(computation)
+			check := func() (cove.SuspensionView[tempo.Pair[bool, temporalEvidence], int], bool) {
 				if expression {
-					return cove.CheckSuspensionExpr(owner.Ctx, owner.Suspension, cove.ExprAtom(temporalAllowed))
+					return cove.CheckSuspensionExpr(state.Observe(), susp, expr)
 				}
-				return cove.CheckSuspension(owner.Ctx, owner.Suspension, temporalAllowed)
+				return cove.CheckSuspension(state.Observe(), susp, req)
 			}
 			refused, ok := check()
-			if ok || refused.Suspension != nil || calls != 0 || owner.Op().(temporalValue).input != 41 {
+			if ok || refused.Suspension != nil || calls != 0 || susp.Op().(temporalValue).input != 41 {
 				t.Fatal("refusal consumed or advanced the owner")
 			}
-			life = life.Step(temporalReady)
-			cached := life.Observe()
-			life = life.Step(terminal)
-			owner = cove.WithContextSuspension(owner, temporalContext{life.Observe(), 7})
+			state = state.Step(events.first)
+			if refused, ok := check(); ok || refused.Suspension != nil || calls != 0 {
+				t.Fatalf("one event admitted work: first=%v expression=%t", events.first, expression)
+			}
+			state = state.Step(events.second)
+			admitted, ok := check()
+			if !ok || admitted.Suspension != susp {
+				t.Fatalf("events=%v expression=%t: matching facts must admit the original suspension", events, expression)
+			}
+			state = state.Step(events.last)
 			checked, ok := check()
-			if !cached || ok != (terminal == temporalReady) {
-				t.Fatal("fresh eligibility did not account for revocation")
+			if ok != (events.last == temporalOther) {
+				t.Fatalf("events=%v expression=%t: allowed after final event=%t", events, expression, ok)
 			}
 			if !ok {
-				owner.Discard()
+				susp.Discard()
 				if calls != 0 {
 					t.Fatal("discard ran the continuation")
 				}
@@ -57,26 +73,26 @@ func TestTemporalRefusalAndRevocation(t *testing.T) {
 }
 
 func TestTemporalCorrelationAndEvidence(t *testing.T) {
-	life, evidence := temporalArmed, temporalEvidence{}
-	generation := uint64(7)
+	state := tempo.Both(temporalArmed, temporalEvidence{})
+	const generation = 7
 	accept := func(id uint64, e temporalEvent) {
 		if id != generation {
 			return
 		}
-		life, evidence = life.Step(e), evidence.Step(e)
+		state = state.Step(e)
 	}
 	accept(6, temporalReady)
-	if life.Observe() {
+	if state.Observe().Left {
 		t.Fatal("stale fact changed this incarnation")
 	}
 	accept(7, temporalReady)
 	accept(7, temporalReturned)
-	if !life.Observe() || evidence.done || !evidence.returned {
+	if obs := state.Observe(); !obs.Left || obs.Right.done || !obs.Right.returned {
 		t.Fatal("non-data evidence was conflated with eligibility or completion")
 	}
 	accept(7, temporalCancel)
 	accept(7, temporalComplete)
-	if life.Observe() || !evidence.done || !evidence.returned {
+	if obs := state.Observe(); obs.Left || !obs.Right.done || !obs.Right.returned {
 		t.Fatal("eligibility loss erased completion evidence")
 	}
 	if temporalIdle.Observe() != temporalArmed.Observe() ||

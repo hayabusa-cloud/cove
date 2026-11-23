@@ -9,6 +9,7 @@ import (
 
 	"code.hybscloud.com/cove"
 	"code.hybscloud.com/kont"
+	"code.hybscloud.com/tempo"
 )
 
 type temporalEvent uint8
@@ -66,13 +67,6 @@ func (s temporalEvidence) Step(e temporalEvent) temporalEvidence {
 	return s
 }
 
-type temporalContext struct {
-	eligible   bool
-	generation uint64
-}
-
-func temporalAllowed(c temporalContext) bool { return c.eligible }
-
 // temporalValue is a pure synthetic operation; it has no external resource.
 type temporalValue struct {
 	kont.Phantom[int]
@@ -80,31 +74,44 @@ type temporalValue struct {
 }
 
 func ExampleCheckSuspension_temporal() {
-	life := temporalIdle.Step(temporalArm)
-	ctx := temporalContext{eligible: life.Observe(), generation: 7}
-	_, owner := cove.StepWith(ctx, kont.Perform(temporalValue{input: 41}))
-	_, allowed := cove.CheckSuspension(owner.Ctx, owner.Suspension, temporalAllowed)
-	fmt.Println("armed:", allowed)
-	// The owner processes readiness and resumption serially for this generation.
-	for _, generation := range []uint64{6, 7} {
-		if generation != ctx.generation {
-			fmt.Println("ignored readiness for generation", generation)
+	const generation = 7
+	state := tempo.Both(temporalIdle, temporalEvidence{}).Step(temporalArm)
+	// The calculation can run when this generation is ready and its prerequisite has completed.
+	canRun := func(obs tempo.Pair[bool, temporalEvidence]) bool { return obs.Left && obs.Right.done }
+	_, susp := cove.Step(kont.Perform(temporalValue{input: 41}))
+	_, allowed := cove.CheckSuspension(state.Observe(), susp, canRun)
+	fmt.Println("allowed after arming:", allowed)
+
+	events := []struct {
+		generation uint64
+		kind       temporalEvent
+	}{
+		{6, temporalComplete},
+		{generation, temporalReady},
+		{generation, temporalComplete},
+	}
+	// The owner processes events and resumes the suspension serially.
+	for _, event := range events {
+		if event.generation != generation {
+			fmt.Println("ignored event for generation", event.generation)
 			continue
 		}
-		life = life.Step(temporalReady)
-		ctx.eligible = life.Observe()
-		checked, ok := cove.CheckSuspension(ctx, owner.Suspension, temporalAllowed)
+		state = state.Step(event.kind)
+		obs := state.Observe()
+		checked, ok := cove.CheckSuspension(obs, susp, canRun)
 		if !ok {
+			fmt.Println("ready:", obs.Left, "prerequisite complete:", obs.Right.done)
 			continue
 		}
 		op := checked.Op().(temporalValue)
 		result, next := checked.Resume(op.input + 1)
-		fmt.Println("completed:", result, next.Suspension == nil)
+		fmt.Println("result:", result, "completed:", next.Suspension == nil)
 		return
 	}
-	owner.Discard()
+	susp.Discard()
 	// Output:
-	// armed: false
-	// ignored readiness for generation 6
-	// completed: 42 true
+	// allowed after arming: false
+	// ignored event for generation 6
+	// ready: true prerequisite complete: false
+	// result: 42 completed: true
 }

@@ -12,11 +12,11 @@ type Operation = kont.Operation
 // Resumed is the value type used to resume a kont suspension boundary.
 type Resumed = kont.Resumed
 
-// SuspensionView pairs a [kont.Suspension] with ambient context.
-// Its Op and Resume methods keep the carrier structurally joinable with `takt`
-// without transferring ownership of the carried context to the runner.
-// A nil Suspension means the computation has completed; Op, Resume, ResumeWith,
-// and Discard panic after completion.
+// SuspensionView pairs ambient context with a pointer to a [kont.Suspension].
+// Copies of the view share that pointer and its one-shot continuation.
+// Its Op and Resume methods satisfy [code.hybscloud.com/takt.SuspensionLike].
+// A completed step returns a view with a nil Suspension. Op, Resume,
+// ResumeWith, and Discard panic on a nil Suspension.
 type SuspensionView[C Ambient, A Focus] struct {
 	Ctx        C
 	Suspension *kont.Suspension[A]
@@ -27,8 +27,8 @@ func ObserveSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A]) Susp
 	return SuspensionView[C, A]{Ctx: ctx, Suspension: susp}
 }
 
-// CheckSuspension returns a suspension view when req holds.
-// Refusal returns a zero view without consuming susp; retain the original handle.
+// CheckSuspension returns ctx and susp as a view when req holds, even if susp is nil.
+// Refusal returns a zero view and leaves any pending suspension with the caller.
 // The caller supplies current context and protects the checked condition through
 // the action it authorizes. This check neither dispatches nor validates a result.
 func CheckSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req Req[C]) (SuspensionView[C, A], bool) {
@@ -39,8 +39,8 @@ func CheckSuspension[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req Re
 	return ObserveSuspension(ctx, susp), true
 }
 
-// CheckSuspensionExpr returns a suspension view when req holds in expression
-// form. Refusal leaves susp unconsumed, as with [CheckSuspension].
+// CheckSuspensionExpr is [CheckSuspension] for an expression requirement.
+// Its verdict depends only on req and ctx, including when susp is nil.
 func CheckSuspensionExpr[C Ambient, A Focus](ctx C, susp *kont.Suspension[A], req ReqExpr[C]) (SuspensionView[C, A], bool) {
 	if !NeedExpr(ctx, req) {
 		var zero SuspensionView[C, A]
