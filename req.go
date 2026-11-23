@@ -71,6 +71,7 @@ func Any[C Ambient](reqs ...Req[C]) Req[C] {
 }
 
 // Not returns the negation of req.
+// If req checks for a receipt, its negation also passes while the outcome is unknown.
 func Not[C Ambient](req Req[C]) Req[C] {
 	if req == nil {
 		return False[C]()

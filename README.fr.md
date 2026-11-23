@@ -250,9 +250,12 @@ et se distribue sur `ExprNot`, `ExprAll` et `ExprAny`.
 Utilisez `Req` pour un prédicat direct et `ReqExpr` pour conserver la structure booléenne. Les deux formes peuvent être
 construites une seule fois. Si les entrées peuvent changer, réévaluez la condition avant d’agir.
 
-Les helpers de pont maintiennent les deux formes alignées : `ReifyReq` enveloppe une exigence en forme fermeture comme
-un `ExprAtom`, donc `ReifyReq(nil)` est invalide et déclenche un panic à l’évaluation ; `ReflectReq` évalue une exigence
-en forme Expr via une fermeture.
+Si `delivered` vérifie la présence d’un accusé de réception, `Not(delivered)` est aussi vrai tant que la livraison
+reste incertaine. Une nouvelle tentative qui exige un rejet confirmé nécessite son propre prédicat.
+
+`ReflectReq(expr)` permet d’évaluer l’expression sous forme de `Req`. `ReifyReq(req)` enveloppe un prédicat non nul
+dans un seul `ExprAtom`. `Need(ctx, nil)` renvoie vrai. Utilisez `ExprTrue[C]()` pour une expression sans restriction.
+`NeedExpr(ctx, ReifyReq[C](nil))` provoque un panic.
 
 ## Valeurs conditionnées
 

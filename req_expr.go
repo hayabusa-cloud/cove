@@ -65,7 +65,7 @@ func ExprAtom[C Ambient](fn func(C) bool) ReqExpr[C] {
 	return ReqExpr[C]{kind: reqAtom, fn: fn}
 }
 
-// ExprNot returns the negation of inner.
+// ExprNot returns the Boolean negation of inner, as in [Not].
 func ExprNot[C Ambient](inner ReqExpr[C]) ReqExpr[C] {
 	return ReqExpr[C]{kind: reqNot, sub: []ReqExpr[C]{inner}}
 }

@@ -120,6 +120,14 @@ func TestReifyReq(t *testing.T) {
 	}
 }
 
+func TestReifyReqNil(t *testing.T) {
+	quoted := cove.ReifyReq[int](nil)
+	if cove.NeedExpr(0, cove.ExprAll(cove.ExprFalse[int](), quoted)) {
+		t.Fatal("expected the first operand to refuse the guard")
+	}
+	expectPanic(t, func() { cove.NeedExpr(0, quoted) })
+}
+
 func TestReifyReqLaw(t *testing.T) {
 	req := cove.Req[int](func(v int) bool { return v > 0 && v < 100 })
 	reified := cove.ReifyReq(req)

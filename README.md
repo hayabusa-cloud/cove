@@ -246,9 +246,11 @@ Combinators: `All`/`ExprAll` (conjunction ∧), `Any`/`ExprAny` (disjunction ∨
 Use `Req` for a direct predicate and `ReqExpr` to preserve Boolean structure. Both can be built once. Recheck the guard
 before acting when its inputs can change.
 
-Bridge helpers keep the two forms aligned: `ReifyReq` is a lossy quotation helper that wraps a closure-form requirement
-as an `ExprAtom`, so `ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form
-requirement through a closure rather than recovering its original structure.
+If `delivered` checks for a receipt, `Not(delivered)` also passes while delivery is unknown. A retry that requires
+confirmed rejection needs its own predicate.
+
+`ReflectReq(expr)` returns a `Req` that evaluates the expression. `ReifyReq(req)` wraps a non-nil predicate as one
+`ExprAtom`. `Need(ctx, nil)` passes. Use `ExprTrue[C]()` for an unrestricted expression. `NeedExpr(ctx, ReifyReq[C](nil))` panics.
 
 ## Gated Values
 

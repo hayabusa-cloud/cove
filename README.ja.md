@@ -237,8 +237,11 @@ ok := cove.NeedExpr(runtime, expr)
 述語を直接使うには `Req` を、ブール構造を保持するには `ReqExpr` を使う。どちらも一度構築して再利用できる。
 入力が変わり得る場合は、実行の直前に要件を再評価する。
 
-ブリッジヘルパーは両形式を整合させる：`ReifyReq` はクロージャ形式の要件をひとつの `ExprAtom` として包むため、
-`ReifyReq(nil)` は無効であり、評価時に panic する。`ReflectReq` は Expr 形式の要件をクロージャ経由で評価する。
+`delivered` が受領通知の有無を調べるなら、配信結果が未確定の間も `Not(delivered)` は真になる。
+拒否が確認された場合に限って再試行するには、専用の述語が必要になる。
+
+`ReflectReq(expr)` で式を `Req` として評価できる。`ReifyReq(req)` は非 nil の述語を一つの `ExprAtom` に包む。
+`Need(ctx, nil)` は真を返す。制約のない式には `ExprTrue[C]()` を使う。`NeedExpr(ctx, ReifyReq[C](nil))` は panic する。
 
 ## ゲート付き値
 

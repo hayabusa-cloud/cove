@@ -248,9 +248,12 @@ distribuye sobre `ExprNot`, `ExprAll` y `ExprAny`.
 Use `Req` para un predicado directo y `ReqExpr` para conservar la estructura booleana. Ambos pueden construirse una
 sola vez. Si los datos de entrada pueden cambiar, vuelva a evaluar el requisito antes de actuar.
 
-Los helpers de puente mantienen alineadas ambas formas: `ReifyReq` envuelve un requisito en forma clausura como un
-`ExprAtom`, por lo que `ReifyReq(nil)` es inválido y entra en pánico al evaluarse; `ReflectReq` evalúa un requisito en
-forma Expr a través de una clausura.
+Si `delivered` comprueba el acuse de recibo, `Not(delivered)` también se cumple mientras se desconoce si hubo entrega.
+Un reintento que exige un rechazo confirmado necesita su propio predicado.
+
+`ReflectReq(expr)` permite evaluar la expresión como un `Req`. `ReifyReq(req)` envuelve un predicado no nulo en un
+solo `ExprAtom`. `Need(ctx, nil)` devuelve verdadero. Use `ExprTrue[C]()` para una expresión sin restricciones.
+`NeedExpr(ctx, ReifyReq[C](nil))` provoca un pánico.
 
 ## Valores controlados
 

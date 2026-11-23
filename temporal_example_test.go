@@ -85,20 +85,26 @@ func ExampleCheckSuspension_temporal() {
 	_, owner := cove.StepWith(ctx, kont.Perform(temporalValue{input: 41}))
 	_, allowed := cove.CheckSuspension(owner.Ctx, owner.Suspension, temporalAllowed)
 	fmt.Println("armed:", allowed)
-	// Refusal leaves owner intact. The owner correlates the new fact, refreshes
-	// context and protects this local check/resume sequence from invalidation.
-	life = life.Step(temporalReady)
-	ctx.eligible = life.Observe()
-	owner = cove.WithContextSuspension(owner, ctx)
-	checked, allowed := cove.CheckSuspension(owner.Ctx, owner.Suspension, temporalAllowed)
-	if !allowed {
-		owner.Discard()
+	// The owner processes readiness and resumption serially for this generation.
+	for _, generation := range []uint64{6, 7} {
+		if generation != ctx.generation {
+			fmt.Println("ignored readiness for generation", generation)
+			continue
+		}
+		life = life.Step(temporalReady)
+		ctx.eligible = life.Observe()
+		checked, ok := cove.CheckSuspension(ctx, owner.Suspension, temporalAllowed)
+		if !ok {
+			continue
+		}
+		op := checked.Op().(temporalValue)
+		result, next := checked.Resume(op.input + 1)
+		fmt.Println("completed:", result, next.Suspension == nil)
 		return
 	}
-	op := checked.Op().(temporalValue)
-	result, next := checked.Resume(op.input + 1)
-	fmt.Println("completed:", result, next.Suspension == nil)
+	owner.Discard()
 	// Output:
 	// armed: false
+	// ignored readiness for generation 6
 	// completed: 42 true
 }

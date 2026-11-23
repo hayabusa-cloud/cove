@@ -229,8 +229,10 @@ ok := cove.NeedExpr(runtime, expr)
 
 直接判断用 `Req`，需要保留布尔结构时用 `ReqExpr`。两者都可以构建一次并复用。如果输入可能变化，应在行动前重新判断。
 
-桥接辅助函数使两种形式保持对齐：`ReifyReq` 将闭包形式的需求包装为一个 `ExprAtom`，因此 `ReifyReq(nil)` 无效，求值时会
-panic；`ReflectReq` 通过闭包对 Expr 形式的需求进行求值。
+如果 `delivered` 检查是否收到了回执，在投递结果尚未确定时，`Not(delivered)` 也为真。只允许在确认被拒后重试时，需要单独的谓词。
+
+`ReflectReq(expr)` 让表达式可以作为 `Req` 求值。`ReifyReq(req)` 把非 nil 谓词包装为单个 `ExprAtom`。
+`Need(ctx, nil)` 返回真。需要无约束的表达式时使用 `ExprTrue[C]()`。`NeedExpr(ctx, ReifyReq[C](nil))` 会触发 panic。
 
 ## 门控值
 
