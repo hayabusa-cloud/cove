@@ -2,11 +2,11 @@
 
 Run the benchmarks with Go 1.27+ on the machine and dependency versions used by your application. Record `go version`, `go env GOOS GOARCH GOEXPERIMENT`, `go list -m all`, CPU details, and `GOMAXPROCS` with each measurement.
 
-The [Benchmarks workflow](.github/workflows/benchmarks.yml) can also be run manually on GitHub. Choose the benchmark filter, duration and repetition count; the job records its environment and raw measurements in the logs. Use the commands below to measure on your deployment machine.
+Benchmarks run on pull requests targeting `main` and on pushes to `main`. Manual runs can override the benchmark filter, duration and repetition count. Each run records its environment and measurements in the job log. [Benchmarks workflow](.github/workflows/benchmarks.yml)
 
 ```bash
 go test -timeout=120s ./...
-go test -run '^$' -bench '^Benchmark(Temporal|ForcingTransition)' -benchmem -benchtime=200ms -count=10 -timeout=120s . > benchmarks.txt
+GOMAXPROCS=1 go test -mod=readonly -run '^$' -bench '^Benchmark(Temporal|ForcingTransition)' -benchmem -benchtime=200ms -count=10 -timeout=120s . > benchmarks.txt
 ```
 
 Use `-bench` to select a workload and adjust `-benchtime`, `-count`, and `GOMAXPROCS` for your environment. Keep these settings and dependency versions identical when comparing implementations. Repeat measurements under comparable load; use `benchstat` if available to summarize variation.
