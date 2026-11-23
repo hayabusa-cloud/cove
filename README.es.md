@@ -22,7 +22,7 @@ stepping asíncrono como datos tipados y componibles.
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -30,6 +30,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+Si `sv.Suspension != nil` al salir del bucle, conserva `sv` y repón su presupuesto antes del siguiente despacho.
 
 El paquete es libre de políticas: transporta y verifica el contexto, pero nunca planifica, reintenta ni despacha.
 

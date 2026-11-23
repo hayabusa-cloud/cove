@@ -22,7 +22,7 @@ asynchrone sous forme de données typées et composables.
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -30,6 +30,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+Si `sv.Suspension != nil` à la sortie de la boucle, conservez `sv` et renouvelez son budget avant le prochain appel à `dispatch`.
 
 Le paquet est sans politique : il transporte et vérifie le contexte, mais ne planifie, ne réessaie ni ne dispatche
 jamais.

@@ -18,7 +18,7 @@ cove 将环境上下文与值及挂起配对，使上下文以类型化、可组
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -26,6 +26,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+循环结束时，若 `sv.Suspension != nil`，则保留 `sv`，并在下次分派前补充预算。
 
 本包是无策略的：只承载与检查上下文，从不调度、重试或分派。
 

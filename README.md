@@ -22,7 +22,7 @@ typed, composable data.
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -30,6 +30,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+If `sv.Suspension != nil` after the loop, keep `sv` and replenish its budget before the next dispatch.
 
 The package is policy-free: it carries and checks context, but never schedules, retries, or dispatches.
 

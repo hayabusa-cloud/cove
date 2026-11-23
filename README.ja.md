@@ -18,7 +18,7 @@ cove は環境コンテキストを値およびサスペンションと対にす
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -26,6 +26,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+ループ終了時に `sv.Suspension != nil` なら、`sv` を保持し、次のディスパッチの前に予算を補充する。
 
 本パッケージはポリシーフリーである。コンテキストの保持と検査のみを行い、スケジューリング・リトライ・ディスパッチは決して行わない。
 
