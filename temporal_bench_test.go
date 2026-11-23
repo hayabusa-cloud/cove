@@ -33,15 +33,23 @@ func BenchmarkTemporalObservation(b *testing.B) {
 			temporalBoolSink = cove.Need(cove.Observe(c, 0).Ask(), temporalDirect)
 		}
 	})
-	b.Run("ReqExpr", func(b *testing.B) {
-		req := cove.ExprAll(cove.ExprAtom(temporalAllowed),
-			cove.ExprAtom(func(c temporalContext) bool { return c.generation == 7 }))
-		b.ReportAllocs()
-		b.ResetTimer()
-		for i := range b.N {
-			temporalBoolSink = cove.NeedExpr(temporalContext{i&1 != 0, uint64(i & 7)}, req)
-		}
-	})
+	generation := cove.ExprAtom(func(g uint64) bool { return g == 7 })
+	for _, tc := range []struct {
+		name  string
+		guard cove.ReqExpr[temporalContext]
+	}{
+		{"ReqExpr", cove.ExprAtom(func(c temporalContext) bool { return c.generation == 7 })},
+		{"ExprPullback", cove.ExprPullback(generation, func(c temporalContext) uint64 { return c.generation })},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			req := cove.ExprAll(cove.ExprAtom(temporalAllowed), tc.guard)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := range b.N {
+				temporalBoolSink = cove.NeedExpr(temporalContext{i&1 != 0, uint64(i & 7)}, req)
+			}
+		})
+	}
 }
 
 func BenchmarkTemporalPullbackSetup(b *testing.B) {

@@ -210,7 +210,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**数据形式** (`ReqExpr`)：可组合的布尔结构，在组合时避免闭包分配。
+**数据形式**（`ReqExpr`）保留布尔结构。
 
 ```go
 expr := cove.ExprAll(
@@ -227,7 +227,7 @@ ok := cove.NeedExpr(runtime, expr)
 
 ### 选择 Req 还是 ReqExpr
 
-临时、一次性的谓词使用 `Req`；当需要组合许多需求、或关注构造阶段的闭包分配时，使用 `ReqExpr`。
+直接判断用 `Req`，需要保留布尔结构时用 `ReqExpr`。两者都可以构建一次并复用。如果输入可能变化，应在行动前重新判断。
 
 桥接辅助函数使两种形式保持对齐：`ReifyReq` 将闭包形式的需求包装为一个 `ExprAtom`，因此 `ReifyReq(nil)` 无效，求值时会
 panic；`ReflectReq` 通过闭包对 Expr 形式的需求进行求值。

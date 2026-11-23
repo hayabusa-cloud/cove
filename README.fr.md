@@ -229,8 +229,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**Forme données** (`ReqExpr`) : structure booléenne composable qui évite l’allocation de fermetures durant la
-composition.
+La **forme de données** (`ReqExpr`) conserve la structure booléenne.
 
 ```go
 expr := cove.ExprAll(
@@ -248,8 +247,8 @@ et se distribue sur `ExprNot`, `ExprAll` et `ExprAny`.
 
 ### Choisir entre Req et ReqExpr
 
-Utilisez `Req` pour les prédicats ponctuels et ad hoc. Utilisez `ReqExpr` lorsque vous composez de nombreuses exigences,
-ou lorsque l’allocation de fermetures à la construction compte.
+Utilisez `Req` pour un prédicat direct et `ReqExpr` pour conserver la structure booléenne. Les deux formes peuvent être
+construites une seule fois. Si les entrées peuvent changer, réévaluez la condition avant d’agir.
 
 Les helpers de pont maintiennent les deux formes alignées : `ReifyReq` enveloppe une exigence en forme fermeture comme
 un `ExprAtom`, donc `ReifyReq(nil)` est invalide et déclenche un panic à l’évaluation ; `ReflectReq` évalue une exigence

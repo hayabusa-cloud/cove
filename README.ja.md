@@ -217,7 +217,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**データ形式** (`ReqExpr`)：合成可能なブール構造で、合成時のクロージャアロケーションを回避する。
+**データ形式** (`ReqExpr`) はブール構造を保持する。
 
 ```go
 expr := cove.ExprAll(
@@ -234,8 +234,8 @@ ok := cove.NeedExpr(runtime, expr)
 
 ### Req と ReqExpr の使い分け
 
-その場限りで一回きりの述語には `Req` を使う。多くの要件を合成する場合や、構築時のクロージャアロケーションが気になる場合には
-`ReqExpr` を使う。
+述語を直接使うには `Req` を、ブール構造を保持するには `ReqExpr` を使う。どちらも一度構築して再利用できる。
+入力が変わり得る場合は、実行の直前に要件を再評価する。
 
 ブリッジヘルパーは両形式を整合させる：`ReifyReq` はクロージャ形式の要件をひとつの `ExprAtom` として包むため、
 `ReifyReq(nil)` は無効であり、評価時に panic する。`ReflectReq` は Expr 形式の要件をクロージャ経由で評価する。

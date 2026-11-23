@@ -98,29 +98,24 @@ func ExprAny[C Ambient](reqs ...ReqExpr[C]) ReqExpr[C] {
 	}
 }
 
-// ExprPullback transports req along a context projection and preserves its
-// explicit Boolean structure.
-// The projection must be pure; evaluation may call it for each visited atom.
+// ExprPullback transports req along a pure context projection. It preserves
+// the Boolean structure and left-to-right short-circuit order of req.
+// A check may call f on the same context for each atom it reaches.
 func ExprPullback[C, D Ambient](req ReqExpr[D], f func(C) D) ReqExpr[C] {
 	switch req.kind {
 	case reqFalse:
 		return ExprFalse[C]()
 	case reqAtom:
-		return ExprAtom(func(ctx C) bool { return req.fn(f(ctx)) })
+		predicate := req.fn
+		return ExprAtom(func(ctx C) bool { return predicate(f(ctx)) })
 	case reqNot:
 		return ExprNot(ExprPullback(req.sub[0], f))
-	case reqAll:
+	case reqAll, reqAny:
 		sub := make([]ReqExpr[C], len(req.sub))
 		for i := range req.sub {
 			sub[i] = ExprPullback(req.sub[i], f)
 		}
-		return ExprAll(sub...)
-	case reqAny:
-		sub := make([]ReqExpr[C], len(req.sub))
-		for i := range req.sub {
-			sub[i] = ExprPullback(req.sub[i], f)
-		}
-		return ExprAny(sub...)
+		return ReqExpr[C]{kind: req.kind, sub: sub}
 	}
 	return ExprTrue[C]()
 }

@@ -225,7 +225,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**Data form** (`ReqExpr`): composable Boolean structure that avoids closure allocation during composition.
+The **data form** (`ReqExpr`) stores the Boolean structure.
 
 ```go
 expr := cove.ExprAll(
@@ -243,8 +243,8 @@ Combinators: `All`/`ExprAll` (conjunction ∧), `Any`/`ExprAny` (disjunction ∨
 
 ### Choosing Req vs ReqExpr
 
-Use `Req` for ad-hoc, one-off predicates. Use `ReqExpr` when composing many requirements, or when closure allocation at
-construction time matters.
+Use `Req` for a direct predicate and `ReqExpr` to preserve Boolean structure. Both can be built once. Recheck the guard
+before acting when its inputs can change.
 
 Bridge helpers keep the two forms aligned: `ReifyReq` is a lossy quotation helper that wraps a closure-form requirement
 as an `ExprAtom`, so `ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form
