@@ -152,9 +152,10 @@ définit l'extension de mondes et expose les contrôles locaux `Extends`, `Refle
 concrètes ; `Forcing` apparie une exigence avec ce préordre, et `Relation` indexe la validité sémantique par monde,
 `StepIndex` fini et valeur.
 
-Utilisez `DiscreteWorlds` pour des mondes reliés seulement par égalité et `TotalWorlds` pour un préordre qui relie toute
-paire de mondes. `ForceExpr` reflète `Force` pour `ReqExpr` ; `CheckRelation`, `WeakenIndexedView` et
-`WeakenIndexedSuspension` rendent explicites les contrôles de relation et l'affaiblissement du crédit de pas.
+Utilisez `DiscreteWorlds` si les mondes peuvent être comparés avec `==` en Go et si chacun est égal à lui-même.
+`TotalWorlds` relie toute paire de mondes. `ForceExpr` reflète `Force` pour `ReqExpr`.
+`CheckRelation`, `WeakenIndexedView` et `WeakenIndexedSuspension` rendent explicites les contrôles de relation et
+l'affaiblissement du crédit de pas.
 
 ```go
 type RuntimeWorld struct {
@@ -179,15 +180,18 @@ later := cove.Later(rel)
 _ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
 ```
 
-Pour les préfixes opérationnels, `StepWithIndex` et `StepExprWithIndex` apparient une `SuspensionView` avec un fuel
-explicite. Chaque `Resume` indexé consomme une unité de crédit de pas, ce qui rend visible la décroissance des
-observations finies. Utilisez `ResumeTo` quand le contexte successeur doit être vérifié comme extension de monde
-Kripke ; `CheckCompletedRelation` contrôle la relation finale sur une frontière indexée terminée :
+Au premier résultat ou à la première opération, `StepWithIndex` et `StepExprWithIndex` conservent tout le crédit initial.
+Chaque reprise indexée consomme une unité. `ResumeTo` vérifie aussi que le monde suivant étend le monde courant.
+Si le crédit est nul, cette boucle abandonne la suspension avant de traiter l'opération. À la fin du calcul,
+`CheckCompletedRelation` vérifie la valeur renvoyée dans le monde final avec le crédit restant.
 
 ```go
-_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
-var val int
-for sv.Extract() != nil {
+val, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+for !sv.Completed() {
+    if sv.Index.IsZero() {
+        sv.Discard()
+        return
+    }
     result := dispatch(sv.Ask(), sv.Op())
     next := sv.Ask()
     next.Epoch++

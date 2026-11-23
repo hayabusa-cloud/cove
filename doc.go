@@ -68,7 +68,8 @@
 //
 //   - [World] names the Kripke reading of ambient context
 //   - [Preorder] names world extension, w <= w'
-//   - [DiscreteWorlds] and [TotalWorlds] provide equality-only and total preorders
+//   - [DiscreteWorlds] uses Go's == operator on worlds that compare equal to themselves
+//   - [TotalWorlds] relates every pair of worlds
 //   - [Extends] is the package-level world-extension helper
 //   - [Preorder.Extends], [Preorder.ReflexiveAt], and [Preorder.TransitiveAt] expose concrete preorder law checks
 //   - [Transition], [CheckTransition], [CheckForcingTransition], and [CheckInvariantTransition] check concrete world edges

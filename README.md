@@ -149,7 +149,8 @@ extension and exposes `Extends`, `ReflexiveAt`, and `TransitiveAt` checks; `Tran
 `CheckForcingTransition`, and `CheckInvariantTransition` check concrete world edges; `Forcing` pairs a requirement with
 that preorder; and `Relation` indexes semantic validity by world, finite `StepIndex`, and value.
 
-Use `DiscreteWorlds` for equality-only worlds and `TotalWorlds` for a preorder that relates every world pair.
+Use `DiscreteWorlds` when Go's `==` is defined for your world values and each world equals itself.
+`TotalWorlds` relates every pair of worlds.
 `ForceExpr` mirrors `Force` for `ReqExpr`; `CheckRelation`, `WeakenIndexedView`, and `WeakenIndexedSuspension` make
 relation checks and step-credit weakening explicit.
 
@@ -176,15 +177,18 @@ later := cove.Later(rel)
 _ = later.Holds(RuntimeWorld{Epoch: 8}, 3, 4)
 ```
 
-For operational prefixes, `StepWithIndex` and `StepExprWithIndex` pair a `SuspensionView` with explicit fuel. Each
-indexed `Resume` consumes one unit of step credit, making finite observations visibly decrease. Use `ResumeTo` when the
-successor context must be checked as a Kripke world extension; `CheckCompletedRelation` checks the final relation at a
-completed indexed frontier:
+The first return or operation from `StepWithIndex` or `StepExprWithIndex` carries the full step credit. Each indexed
+resume spends one unit. `ResumeTo` also checks that the successor world extends the current one. This driver discards
+a pending suspension before dispatch if its credit is zero. On completion, `CheckCompletedRelation` checks the returned
+value at the final world and remaining credit.
 
 ```go
-_, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
-var val int
-for sv.Extract() != nil {
+val, sv := cove.StepExprWithIndex(RuntimeWorld{Epoch: 2}, 2, expr)
+for !sv.Completed() {
+	if sv.Index.IsZero() {
+		sv.Discard()
+		return
+	}
 	result := dispatch(sv.Ask(), sv.Op())
 	next := sv.Ask()
 	next.Epoch++
