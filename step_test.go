@@ -48,13 +48,25 @@ func TestCheckSuspensionFailure(t *testing.T) {
 }
 
 func TestSuspensionViewDiscard(t *testing.T) {
-	cont := kont.Perform(ping{})
-	expr := cove.Reify(cont)
-	_, step := cove.StepExprWith("ctx", expr)
-	if step.Suspension == nil {
-		t.Fatal("expected suspension")
+	for _, indexed := range []bool{false, true} {
+		ran := false
+		expr := kont.ExprMap(kont.ExprPerform(ping{}), func(v int) int {
+			ran = true
+			return v
+		})
+		_, susp := cove.StepExpr(expr)
+		if indexed {
+			cove.ObserveIndexedSuspension("ctx", 0, susp).Discard()
+		} else {
+			cove.ObserveSuspension("ctx", susp).Discard()
+		}
+		if ran {
+			t.Errorf("indexed=%t: Discard ran the continuation", indexed)
+		}
+		if _, _, resumed := susp.TryResume(42); resumed {
+			t.Errorf("indexed=%t: discarded suspension accepted a reply", indexed)
+		}
 	}
-	step.Discard()
 }
 
 func TestStepWithContCompletion(t *testing.T) {
