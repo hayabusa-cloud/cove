@@ -108,16 +108,17 @@
 //   - [Reify] captures one invocation. [Reflect] shares it when the result is pending.
 //   - [ReifyReq] and [ReflectReq] bridge cove's closure and expression requirements
 //
-// Laws below assume pure, total callbacks and stable context. Equality is
-// observational; it does not require values or functions to be Go-comparable.
+// The laws below assume pure, total callbacks and stable context. The symbol
+// ≈ denotes observational equality, including for slices and functions.
 // ExprPullback may apply its context projection to each visited atom. Bind
 // composite requirements before the evaluation path when their construction
 // cost should be excluded from that path.
 //
-//   - [Duplicate](v).Extract() == v
-//   - [Extend](v, func(w View[C, A]) A { return w.Extract() }) == v
-//   - [Compose](g, f)(v) == g([Extend](v, f))
-//   - [Compose]([ExtractCmd], f) == f and [Compose](g, [ExtractCmd]) == g
+//   - [Duplicate](v).Extract() ≈ v
+//   - [Extend](v, [ExtractCmd]) ≈ v
+//   - [Extend]([Extend](v, f), g) ≈ [Extend](v, [Compose](g, f))
+//   - [Compose](g, f)(v) ≈ g([Extend](v, f))
+//   - [Compose]([ExtractCmd], f) ≈ f and [Compose](g, [ExtractCmd]) ≈ g
 //   - NeedExpr(ctx, [ReifyReq](req)) == [Need](ctx, req), when req != nil
 //   - [Need](ctx, [ReflectReq](expr)) == [NeedExpr](ctx, expr)
 //   - [ExprPullback] distributes over [ExprNot], [ExprAll], and [ExprAny]

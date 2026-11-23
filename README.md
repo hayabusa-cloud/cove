@@ -204,7 +204,7 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 
 `Cmd[C, A, B]` is the coKleisli arrow `View[C, A] -> B`. `Run` applies a command to a concrete `View`; `ExtractCmd` is
 the identity command; `LiftCmd` lifts a focus-only map into the contextual world; `Compose` composes commands through
-`Extend`, satisfying `Compose(g, f)(v) == g(Extend(v, f))`.
+`Extend`. On a view `v`, `Compose(g, f)` evaluates `g(Extend(v, f))`.
 
 ```go
 cmd := cove.Compose(
@@ -326,17 +326,13 @@ v.Extract()   // value in focus   (ε = π₂)
 Transformations: `Map` (functorial lift on `A`), `MapContext` (functorial lift on `C`), `Replace` (substitute the
 value), `WithContext` (substitute the context).
 
-`Duplicate` and `Extend` satisfy the comonad laws:
+The laws for `Duplicate` and `Extend` assume stable context and pure, total callbacks. `≈` denotes observational equality. [Go tests](view_test.go)
 
-```go
-// Counit law:  ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// Extension identity:  extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// Associativity:  extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| Law | Equation |
+| --- | --- |
+| Counit | `Duplicate(v).Extract() ≈ v` |
+| Extension identity | `Extend(v, ExtractCmd) ≈ v` |
+| Associativity | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` is the contextual extension operator: given `f: W(C, A) → B`, it lifts `f` to `W(C, A) → W(C, B)` while
 preserving the ambient context. The induced command composition with `g: W(C, B) → D` is `g ∘ Extend(f)`.

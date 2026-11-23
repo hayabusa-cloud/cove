@@ -209,7 +209,7 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 
 `Cmd[C, A, B]` est une commande contextuelle `View[C, A] -> B`. `Run` applique une commande à une `View` concrète ;
 `ExtractCmd` est la commande identité ; `LiftCmd` relève dans le monde contextuel une transformation ne portant que sur
-la valeur focalisée ; `Compose` compose des commandes via `Extend`.
+la valeur focalisée. Pour une vue `v`, `Compose(g, f)` évalue `g(Extend(v, f))`.
 
 ```go
 cmd := cove.Compose(
@@ -333,17 +333,13 @@ v.Extract()   // valeur focalisée (ε = π₂)
 Transformations : `Map` (relèvement fonctoriel sur `A`), `MapContext` (relèvement fonctoriel sur `C`), `Replace` (
 substituer la valeur), `WithContext` (substituer le contexte).
 
-`Duplicate` et `Extend` satisfont les lois comonadiques :
+Les lois de `Duplicate` et `Extend` supposent un contexte stable et des fonctions pures et totales. `≈` désigne l’égalité observationnelle. [Tests Go](view_test.go)
 
-```go
-// Loi de counité : ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// Identité d'extension : extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// Associativité : extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| Loi | Équation |
+| --- | --- |
+| Counité | `Duplicate(v).Extract() ≈ v` |
+| Identité d’extension | `Extend(v, ExtractCmd) ≈ v` |
+| Associativité | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` est l’opérateur d’extension contextuelle : étant donné `f: W(C, A) → B`, il relève `f` en `W(C, A) → W(C, B)`
 en préservant le contexte ambiant. La composition de commandes induite avec `g: W(C, B) → D` est `g ∘ Extend(f)`.

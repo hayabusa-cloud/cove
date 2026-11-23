@@ -13,8 +13,8 @@ func Run[C Ambient, A, B Focus](v View[C, A], cmd Cmd[C, A, B]) B {
 	return cmd(v)
 }
 
-// ExtractCmd returns the focused value and serves as the identity command for
-// [View]: Compose(ExtractCmd, f) == f and Compose(g, ExtractCmd) == g.
+// ExtractCmd returns the focused value and is the identity for [Compose].
+// Composing it on either side of a command preserves the result at every view.
 func ExtractCmd[C Ambient, A Focus](v View[C, A]) A {
 	return v.Extract()
 }
@@ -26,8 +26,8 @@ func LiftCmd[C Ambient, A, B Focus](f func(A) B) Cmd[C, A, B] {
 	}
 }
 
-// Compose composes contextual commands through [Extend], satisfying the
-// coKleisli composition law Compose(g, f)(v) == g(Extend(v, f)).
+// Compose returns the coKleisli composition of g and f.
+// At a view v it applies g to [Extend](v, f).
 func Compose[C Ambient, A, B, D Focus](g Cmd[C, B, D], f Cmd[C, A, B]) Cmd[C, A, D] {
 	return func(v View[C, A]) D {
 		return g(Extend(v, f))

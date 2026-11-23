@@ -207,8 +207,8 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 ## Comandos
 
 `Cmd[C, A, B]` es un comando contextual `View[C, A] -> B`. `Run` aplica un comando a un `View` concreto; `ExtractCmd` es
-el comando identidad; `LiftCmd` eleva al mundo contextual una transformación centrada solo en el valor enfocado;
-`Compose` compone comandos mediante `Extend`.
+el comando identidad y `LiftCmd` eleva al mundo contextual una transformación centrada solo en el valor enfocado.
+Para una vista `v`, `Compose(g, f)` evalúa `g(Extend(v, f))`.
 
 ```go
 cmd := cove.Compose(
@@ -331,17 +331,13 @@ v.Extract()   // valor enfocado (ε = π₂)
 Transformaciones: `Map` (elevación funtorial sobre `A`), `MapContext` (elevación funtorial sobre `C`), `Replace` (
 sustituir el valor), `WithContext` (sustituir el contexto).
 
-`Duplicate` y `Extend` satisfacen las leyes comonádicas:
+Las leyes de `Duplicate` y `Extend` suponen un contexto estable y funciones puras y totales. `≈` denota igualdad observacional. [Pruebas en Go](view_test.go)
 
-```go
-// Ley de counidad: ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// Identidad de extensión: extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// Asociatividad: extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| Ley | Ecuación |
+| --- | --- |
+| Counidad | `Duplicate(v).Extract() ≈ v` |
+| Identidad de extensión | `Extend(v, ExtractCmd) ≈ v` |
+| Asociatividad | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` es el operador de extensión contextual: dado `f: W(C, A) → B`, eleva `f` a `W(C, A) → W(C, B)` preservando el
 contexto ambiental. La composición de comandos inducida con `g: W(C, B) → D` es `g ∘ Extend(f)`.
