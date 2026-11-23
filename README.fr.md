@@ -22,7 +22,7 @@ asynchrone sous forme de données typées et composables.
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -30,6 +30,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+Si `sv.Suspension != nil` à la sortie de la boucle, conservez `sv` et renouvelez son budget avant le prochain appel à `dispatch`.
 
 Le paquet est sans politique : il transporte et vérifie le contexte, mais ne planifie, ne réessaie ni ne dispatche
 jamais.
@@ -207,14 +209,14 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 
 `Cmd[C, A, B]` est une commande contextuelle `View[C, A] -> B`. `Run` applique une commande à une `View` concrète ;
 `ExtractCmd` est la commande identité ; `LiftCmd` relève dans le monde contextuel une transformation ne portant que sur
-la valeur focalisée ; `Compose` compose des commandes via `Extend`.
+la valeur focalisée. Pour une vue `v`, `Compose(g, f)` évalue `g(Extend(v, f))`.
 
 ```go
 cmd := cove.Compose(
     func(v cove.View[Runtime, int]) string {
         return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
     },
-    cove.LiftCmd(func(n int) int { return n + 1 }),
+    cove.LiftCmd[Runtime](func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
@@ -331,17 +333,13 @@ v.Extract()   // valeur focalisée (ε = π₂)
 Transformations : `Map` (relèvement fonctoriel sur `A`), `MapContext` (relèvement fonctoriel sur `C`), `Replace` (
 substituer la valeur), `WithContext` (substituer le contexte).
 
-`Duplicate` et `Extend` satisfont les lois comonadiques :
+Les lois de `Duplicate` et `Extend` supposent un contexte stable et des fonctions pures et totales. `≈` désigne l’égalité observationnelle. [Tests Go](view_test.go)
 
-```go
-// Loi de counité : ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// Identité d'extension : extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// Associativité : extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| Loi | Équation |
+| --- | --- |
+| Counité | `Duplicate(v).Extract() ≈ v` |
+| Identité d’extension | `Extend(v, ExtractCmd) ≈ v` |
+| Associativité | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` est l’opérateur d’extension contextuelle : étant donné `f: W(C, A) → B`, il relève `f` en `W(C, A) → W(C, B)`
 en préservant le contexte ambiant. La composition de commandes induite avec `g: W(C, B) → D` est `g ∘ Extend(f)`.

@@ -18,7 +18,7 @@ cove は環境コンテキストを値およびサスペンションと対にす
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -26,6 +26,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+ループ終了時に `sv.Suspension != nil` なら、`sv` を保持し、次のディスパッチの前に予算を補充する。
 
 本パッケージはポリシーフリーである。コンテキストの保持と検査のみを行い、スケジューリング・リトライ・ディスパッチは決して行わない。
 
@@ -195,14 +197,14 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 ## コマンド
 
 `Cmd[C, A, B]` は文脈コマンド `View[C, A] -> B` である。`Run` は具体的な `View` にコマンドを適用し、`ExtractCmd` は恒等コマンド、
-`LiftCmd` は焦点値のみに作用する変換を文脈世界へ持ち上げ、`Compose` は `Extend` を通じてコマンドを合成する。
+`LiftCmd` は焦点値のみに作用する変換を文脈世界へ持ち上げる。ビュー `v` に対し、`Compose(g, f)` は `g(Extend(v, f))` を評価する。
 
 ```go
 cmd := cove.Compose(
     func(v cove.View[Runtime, int]) string {
         return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
     },
-    cove.LiftCmd(func(n int) int { return n + 1 }),
+    cove.LiftCmd[Runtime](func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
@@ -314,17 +316,13 @@ v.Extract()   // 焦点値 (ε = π₂)
 
 変換：`Map`（`A` 上の関手持ち上げ）、`MapContext`（`C` 上の関手持ち上げ）、`Replace`（値の置換）、`WithContext`（コンテキストの置換）。
 
-`Duplicate` と `Extend` は余モナド律を満たす：
+`Duplicate` と `Extend` の法則は、安定したコンテキストと純粋な全域関数を前提とする。`≈` は観測的同値を表す。[Go のテスト](view_test.go)
 
-```go
-// 余単位律：ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// 拡張恒等律：extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// 結合律：extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| 法則 | 等式 |
+| --- | --- |
+| 余単位律 | `Duplicate(v).Extract() ≈ v` |
+| 拡張恒等律 | `Extend(v, ExtractCmd) ≈ v` |
+| 結合律 | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` は文脈拡張演算子である：`f: W(C, A) → B` が与えられたとき、環境コンテキストを保存しつつ `f` を
 `W(C, A) → W(C, B)` に持ち上げる。`g: W(C, B) → D` との間に誘導されるコマンド合成は `g ∘ Extend(f)` である。

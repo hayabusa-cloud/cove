@@ -18,7 +18,7 @@ cove 将环境上下文与值及挂起配对，使上下文以类型化、可组
 
 ```go
 _, sv := cove.StepExprWith(Runtime{Budget: 8}, computation)
-for sv.Suspension != nil {
+for sv.Suspension != nil && sv.Ask().Budget > 0 {
     result := dispatch(sv.Ask(), sv.Op())
     _, sv = sv.ResumeWith(result, func(r Runtime) Runtime {
         r.Budget--
@@ -26,6 +26,8 @@ for sv.Suspension != nil {
     })
 }
 ```
+
+循环结束时，若 `sv.Suspension != nil`，则保留 `sv`，并在下次分派前补充预算。
 
 本包是无策略的：只承载与检查上下文，从不调度、重试或分派。
 
@@ -186,14 +188,14 @@ _ = cove.CheckCompletedRelation(sv, val, rel)
 ## 命令
 
 `Cmd[C, A, B]` 是上下文命令 `View[C, A] -> B`。`Run` 将命令应用到具体的 `View`；`ExtractCmd` 是恒等命令；`LiftCmd`
-把仅作用于焦点值的映射提升到上下文世界；`Compose` 通过 `Extend` 组合命令。
+把仅作用于焦点值的映射提升到上下文世界。将 `Compose(g, f)` 应用于视图 `v` 时，会计算 `g(Extend(v, f))`。
 
 ```go
 cmd := cove.Compose(
     func(v cove.View[Runtime, int]) string {
         return fmt.Sprintf("budget=%d value=%d", v.Ask().Budget, v.Extract())
     },
-    cove.LiftCmd(func(n int) int { return n + 1 }),
+    cove.LiftCmd[Runtime](func(n int) int { return n + 1 }),
 )
 out := cove.Run(cove.Observe(Runtime{Budget: 8}, 41), cmd)
 _ = out // "budget=8 value=42"
@@ -302,17 +304,13 @@ v.Extract()   // 聚焦值 (ε = π₂)
 
 变换：`Map`（在 `A` 上的函子提升）、`MapContext`（在 `C` 上的函子提升）、`Replace`（替换值）、`WithContext`（替换上下文）。
 
-`Duplicate` 和 `Extend` 满足余单子定律：
+`Duplicate` 和 `Extend` 的定律假设上下文稳定，回调是处处有定义的纯函数。`≈` 表示观测等价。[Go 测试](view_test.go)
 
-```go
-// 余单位律：ε ∘ δ = id
-cove.Duplicate(v).Extract() == v
-
-// 扩展恒等律：extend(ε) = id
-cove.Extend(v, func(w cove.View[C, A]) A { return w.Extract() }) == v
-
-// 结合律：extend(f) ∘ extend(g) = extend(f ∘ extend(g))
-```
+| 定律 | 等式 |
+| --- | --- |
+| 余单位律 | `Duplicate(v).Extract() ≈ v` |
+| 扩展恒等律 | `Extend(v, ExtractCmd) ≈ v` |
+| 结合律 | `Extend(Extend(v, f), g) ≈ Extend(v, Compose(g, f))` |
 
 `Extend` 是上下文扩展算子：给定 `f: W(C, A) → B`，在保持环境上下文的同时将 `f` 提升为 `W(C, A) → W(C, B)`。与
 `g: W(C, B) → D` 诱导出的命令组合为 `g ∘ Extend(f)`。
