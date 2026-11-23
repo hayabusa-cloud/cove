@@ -35,7 +35,7 @@ for sv.Suspension != nil {
 go get code.hybscloud.com/cove
 ```
 
-Go 1.26+ が必要。
+Go 1.27+ が必要。
 
 ## コア型
 
@@ -63,6 +63,11 @@ Go 1.26+ が必要。
 
 `StepWith` と `StepExprWith` は kont 計算を評価し、その最初のサスペンションを環境コンテキストと対にする。各サスペンションはアフィンであり、
 `Resume`、`ResumeWith`、または `Discard` のいずれかによって、ちょうど一度だけ消費される。
+
+`Cont` を直接進めるには `StepWith(ctx, m)` を使う。`Reify(m)` は最初のリターンまたは操作まで計算を進める。
+完了した結果は再利用できる。保留中の結果とそのコピーは同じ一回の実行を共有する。
+`Reflect` を経由する場合も、同じ結果を二度ステップすると panic する。
+繰り返し実行するには、元の再利用可能な `Cont` に毎回 `Reify` を適用する。
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -212,7 +217,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**データ形式** (`ReqExpr`)：合成可能なブール構造で、合成時のクロージャアロケーションを回避する。
+**データ形式** (`ReqExpr`) はブール構造を保持する。
 
 ```go
 expr := cove.ExprAll(
@@ -229,11 +234,14 @@ ok := cove.NeedExpr(runtime, expr)
 
 ### Req と ReqExpr の使い分け
 
-その場限りで一回きりの述語には `Req` を使う。多くの要件を合成する場合や、構築時のクロージャアロケーションが気になる場合には
-`ReqExpr` を使う。
+述語を直接使うには `Req` を、ブール構造を保持するには `ReqExpr` を使う。どちらも一度構築して再利用できる。
+入力が変わり得る場合は、実行の直前に要件を再評価する。
 
-ブリッジヘルパーは両形式を整合させる：`ReifyReq` はクロージャ形式の要件をひとつの `ExprAtom` として包むため、
-`ReifyReq(nil)` は無効であり、評価時に panic する。`ReflectReq` は Expr 形式の要件をクロージャ経由で評価する。
+`delivered` が受領通知の有無を調べるなら、配信結果が未確定の間も `Not(delivered)` は真になる。
+拒否が確認された場合に限って再試行するには、専用の述語が必要になる。
+
+`ReflectReq(expr)` で式を `Req` として評価できる。`ReifyReq(req)` は非 nil の述語を一つの `ExprAtom` に包む。
+`Need(ctx, nil)` は真を返す。制約のない式には `ExprTrue[C]()` を使う。`NeedExpr(ctx, ReifyReq[C](nil))` は panic する。
 
 ## ゲート付き値
 
@@ -390,7 +398,7 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 
 ## プラットフォームサポート
 
-`cove` はこのモジュール内の純粋 Go パッケージである。プラットフォーム固有ファイルや build tag はなく、必要条件は Go 1.26+ のみ。
+`cove` はこのモジュール内の純粋 Go パッケージである。プラットフォーム固有ファイルや build tag はなく、必要条件は Go 1.27+ のみ。
 
 ## ライセンス
 

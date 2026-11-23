@@ -39,7 +39,7 @@ The package is policy-free: it carries and checks context, but never schedules, 
 go get code.hybscloud.com/cove
 ```
 
-Requires Go 1.26+.
+Requires Go 1.27+.
 
 ## Core Types
 
@@ -67,6 +67,10 @@ and `Focus` constrains value type parameters (A, B).
 
 `StepWith` and `StepExprWith` evaluate a kont computation and pair its first suspension with ambient context. Each
 suspension is affine: consume it exactly once, via `Resume`, `ResumeWith`, or `Discard`.
+
+Use `StepWith(ctx, m)` to step a `Cont` directly. `Reify(m)` runs to the first return or operation. A completed result
+is reusable. A pending result and its copies share one invocation. Stepping it twice panics, including through
+`Reflect`. Reify the original reusable `Cont` again for each run.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -221,7 +225,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**Data form** (`ReqExpr`): composable Boolean structure that avoids closure allocation during composition.
+The **data form** (`ReqExpr`) stores the Boolean structure.
 
 ```go
 expr := cove.ExprAll(
@@ -239,12 +243,14 @@ Combinators: `All`/`ExprAll` (conjunction ∧), `Any`/`ExprAny` (disjunction ∨
 
 ### Choosing Req vs ReqExpr
 
-Use `Req` for ad-hoc, one-off predicates. Use `ReqExpr` when composing many requirements, or when closure allocation at
-construction time matters.
+Use `Req` for a direct predicate and `ReqExpr` to preserve Boolean structure. Both can be built once. Recheck the guard
+before acting when its inputs can change.
 
-Bridge helpers keep the two forms aligned: `ReifyReq` is a lossy quotation helper that wraps a closure-form requirement
-as an `ExprAtom`, so `ReifyReq(nil)` is invalid and panics when evaluated; `ReflectReq` evaluates an Expr-form
-requirement through a closure rather than recovering its original structure.
+If `delivered` checks for a receipt, `Not(delivered)` also passes while delivery is unknown. A retry that requires
+confirmed rejection needs its own predicate.
+
+`ReflectReq(expr)` returns a `Req` that evaluates the expression. `ReifyReq(req)` wraps a non-nil predicate as one
+`ExprAtom`. `Need(ctx, nil)` passes. Use `ExprTrue[C]()` for an unrestricted expression. `NeedExpr(ctx, ReifyReq[C](nil))` panics.
 
 ## Gated Values
 
@@ -405,7 +411,7 @@ See the [benchmark guide](BENCHMARKS.md) for comparable workloads, measurement c
 
 ## Platform Support
 
-`cove` is a pure Go package in this module. It has no platform-specific files or build tags; the module requirement is Go 1.26+.
+`cove` is a pure Go package in this module. It has no platform-specific files or build tags; the module requirement is Go 1.27+.
 
 ## License
 

@@ -5,6 +5,7 @@
 package cove_test
 
 import (
+	"slices"
 	"testing"
 
 	"code.hybscloud.com/cove"
@@ -141,25 +142,36 @@ func TestExprPullbackComposition(t *testing.T) {
 
 func TestExprPullbackComposite(t *testing.T) {
 	type runtime struct{ Budget int }
+	var visited []string
+	atom := func(name string, test func(int) bool) cove.ReqExpr[int] {
+		return cove.ExprAtom(func(v int) bool {
+			visited = append(visited, name)
+			return test(v)
+		})
+	}
 	expr := cove.ExprAll(
 		cove.ExprAny(
-			cove.ExprAtom(func(v int) bool { return v > 0 }),
-			cove.ExprAtom(func(v int) bool { return v == -4 }),
+			atom("positive", func(v int) bool { return v > 0 }),
+			atom("alternate", func(v int) bool { return v == -4 }),
 		),
-		cove.ExprNot(cove.ExprAtom(func(v int) bool { return v == 7 })),
+		cove.ExprNot(atom("seven", func(v int) bool { return v == 7 })),
 	)
 	pulled := cove.ExprPullback(expr, func(rt runtime) int { return rt.Budget })
-	if !cove.NeedExpr(runtime{Budget: 2}, pulled) {
-		t.Fatal("composite pullback should pass for positive budget")
-	}
-	if !cove.NeedExpr(runtime{Budget: -4}, pulled) {
-		t.Fatal("composite pullback should pass for alternate branch")
-	}
-	if cove.NeedExpr(runtime{Budget: 7}, pulled) {
-		t.Fatal("composite pullback should fail when negated branch matches")
-	}
-	if cove.NeedExpr(runtime{Budget: 0}, pulled) {
-		t.Fatal("composite pullback should fail when all branches fail")
+	for _, tc := range []struct {
+		budget int
+		want   bool
+		visits []string
+	}{
+		{2, true, []string{"positive", "seven"}},
+		{-4, true, []string{"positive", "alternate", "seven"}},
+		{7, false, []string{"positive", "seven"}},
+		{0, false, []string{"positive", "alternate"}},
+	} {
+		visited = visited[:0]
+		got := cove.NeedExpr(runtime{Budget: tc.budget}, pulled)
+		if got != tc.want || !slices.Equal(visited, tc.visits) {
+			t.Errorf("budget %d: got %t visiting %v, want %t visiting %v", tc.budget, got, visited, tc.want, tc.visits)
+		}
 	}
 }
 

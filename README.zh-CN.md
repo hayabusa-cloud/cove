@@ -35,7 +35,7 @@ for sv.Suspension != nil {
 go get code.hybscloud.com/cove
 ```
 
-需要 Go 1.26+。
+需要 Go 1.27+。
 
 ## 核心类型
 
@@ -62,6 +62,10 @@ go get code.hybscloud.com/cove
 
 `StepWith` 与 `StepExprWith` 对 kont 计算求值，并将其第一个挂起与环境上下文配对。每个挂起都是仿射的：须通过 `Resume`、
 `ResumeWith` 或 `Discard` 恰好消耗一次。
+
+用 `StepWith(ctx, m)` 直接推进 `Cont`。`Reify(m)` 将计算推进到首次返回或产生操作。已完成的结果可以复用。
+挂起的结果及其副本共享同一次调用。对同一结果推进两次会触发 panic，经由 `Reflect` 也是如此。
+若要重复执行，每次都应对原来可复用的 `Cont` 重新调用 `Reify`。
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -206,7 +210,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**数据形式** (`ReqExpr`)：可组合的布尔结构，在组合时避免闭包分配。
+**数据形式**（`ReqExpr`）保留布尔结构。
 
 ```go
 expr := cove.ExprAll(
@@ -223,10 +227,12 @@ ok := cove.NeedExpr(runtime, expr)
 
 ### 选择 Req 还是 ReqExpr
 
-临时、一次性的谓词使用 `Req`；当需要组合许多需求、或关注构造阶段的闭包分配时，使用 `ReqExpr`。
+直接判断用 `Req`，需要保留布尔结构时用 `ReqExpr`。两者都可以构建一次并复用。如果输入可能变化，应在行动前重新判断。
 
-桥接辅助函数使两种形式保持对齐：`ReifyReq` 将闭包形式的需求包装为一个 `ExprAtom`，因此 `ReifyReq(nil)` 无效，求值时会
-panic；`ReflectReq` 通过闭包对 Expr 形式的需求进行求值。
+如果 `delivered` 检查是否收到了回执，在投递结果尚未确定时，`Not(delivered)` 也为真。只允许在确认被拒后重试时，需要单独的谓词。
+
+`ReflectReq(expr)` 让表达式可以作为 `Req` 求值。`ReifyReq(req)` 把非 nil 谓词包装为单个 `ExprAtom`。
+`Need(ctx, nil)` 返回真。需要无约束的表达式时使用 `ExprTrue[C]()`。`NeedExpr(ctx, ReifyReq[C](nil))` 会触发 panic。
 
 ## 门控值
 
@@ -383,7 +389,7 @@ if view, ok := checked.IntoView(Caps{CanSubmit: true, HasToken: true}); ok {
 
 ## 平台支持
 
-`cove` 是该模块中的纯 Go 包。它没有平台特定文件或 build tag；模块要求仅为 Go 1.26+。
+`cove` 是该模块中的纯 Go 包。它没有平台特定文件或 build tag；模块要求仅为 Go 1.27+。
 
 ## 许可证
 

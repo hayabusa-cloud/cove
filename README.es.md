@@ -39,7 +39,7 @@ El paquete es libre de políticas: transporta y verifica el contexto, pero nunca
 go get code.hybscloud.com/cove
 ```
 
-Requiere Go 1.26+.
+Requiere Go 1.27+.
 
 ## Tipos principales
 
@@ -67,6 +67,11 @@ Kripke, y `Focus` restringe parámetros de tipo de valor (A, B).
 
 `StepWith` y `StepExprWith` evalúan una computación kont y emparejan su primera suspensión con el contexto ambiental.
 Cada suspensión es afín: se consume exactamente una vez, mediante `Resume`, `ResumeWith` o `Discard`.
+
+Use `StepWith(ctx, m)` para avanzar un `Cont` directamente. `Reify(m)` ejecuta el cálculo hasta el primer retorno u
+operación. Un resultado completado es reutilizable. Un resultado pendiente y sus copias comparten una sola invocación.
+Avanzarlo dos veces provoca un pánico, incluso a través de `Reflect`. Para cada ejecución, vuelva a aplicar `Reify`
+al `Cont` reutilizable original.
 
 ```go
 val, sv := cove.StepExprWith(ctx, expr)
@@ -222,7 +227,7 @@ req := cove.All(
 ok := cove.Need(runtime, req)
 ```
 
-**Forma datos** (`ReqExpr`): estructura booleana componible que evita la asignación de clausuras durante la composición.
+La **forma de datos** (`ReqExpr`) conserva la estructura booleana.
 
 ```go
 expr := cove.ExprAll(
@@ -240,12 +245,15 @@ distribuye sobre `ExprNot`, `ExprAll` y `ExprAny`.
 
 ### Elegir entre Req y ReqExpr
 
-Use `Req` para predicados puntuales y ad hoc. Use `ReqExpr` cuando componga muchos requisitos, o cuando importe la
-asignación de clausuras en tiempo de construcción.
+Use `Req` para un predicado directo y `ReqExpr` para conservar la estructura booleana. Ambos pueden construirse una
+sola vez. Si los datos de entrada pueden cambiar, vuelva a evaluar el requisito antes de actuar.
 
-Los helpers de puente mantienen alineadas ambas formas: `ReifyReq` envuelve un requisito en forma clausura como un
-`ExprAtom`, por lo que `ReifyReq(nil)` es inválido y entra en pánico al evaluarse; `ReflectReq` evalúa un requisito en
-forma Expr a través de una clausura.
+Si `delivered` comprueba el acuse de recibo, `Not(delivered)` también se cumple mientras se desconoce si hubo entrega.
+Un reintento que exige un rechazo confirmado necesita su propio predicado.
+
+`ReflectReq(expr)` permite evaluar la expresión como un `Req`. `ReifyReq(req)` envuelve un predicado no nulo en un
+solo `ExprAtom`. `Need(ctx, nil)` devuelve verdadero. Use `ExprTrue[C]()` para una expresión sin restricciones.
+`NeedExpr(ctx, ReifyReq[C](nil))` provoca un pánico.
 
 ## Valores controlados
 
@@ -407,7 +415,7 @@ La [guía de benchmarks](BENCHMARKS.md) describe cargas comparables, comandos de
 
 ## Compatibilidad de plataforma
 
-`cove` es un paquete puro de Go en este módulo. No tiene archivos específicos de plataforma ni build tags; el requisito del módulo es Go 1.26+.
+`cove` es un paquete puro de Go en este módulo. No tiene archivos específicos de plataforma ni build tags; el requisito del módulo es Go 1.27+.
 
 ## Licencia
 

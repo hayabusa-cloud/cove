@@ -15,7 +15,7 @@ Caller code owns concurrency control and the protected interval between a requir
 
 ## Verification
 
-Use Go 1.26+ and black-box tests in `package cove_test`.
+Use Go 1.27+ and black-box tests in `package cove_test`.
 
 ```bash
 make check
